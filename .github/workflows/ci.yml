@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A new push to the same branch cancels an in-flight run: CI feedback should be
+# about the current commit, not a superseded one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          # The version in go.mod is the single source of truth.
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: '1.31.1'
+
+      - name: Verify generated SQL code matches sql/queries
+        # Catches a committed query change whose generated code was not
+        # regenerated, and any query that no longer matches the schema.
+        run: sqlc diff
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build
+        run: go build -o bin/server ./cmd/server
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    # Applying the migrations against a real PostgreSQL proves they are valid
+    # SQL and that every migration can be rolled back.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: cardwise
+          POSTGRES_PASSWORD: cardwise
+          POSTGRES_DB: cardwise_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cardwise"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://cardwise:cardwise@localhost:5432/cardwise_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Apply migrations
+        working-directory: backend
+        run: >-
+          go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
+          -path migrations -database "$DATABASE_URL" up
+
+      - name: Roll migrations back
+        working-directory: backend
+        run: >-
+          go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
+          -path migrations -database "$DATABASE_URL" down -all
