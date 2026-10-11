@@ -8,7 +8,7 @@ package db
 import (
 	"context"
 
-	"github.com/google/uuid"
+	uuid "github.com/google/uuid"
 )
 
 const getCreditCard = `-- name: GetCreditCard :one
@@ -31,10 +31,10 @@ func (q *Queries) GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, 
 }
 
 const listCardRewardCategories = `-- name: ListCardRewardCategories :many
-SELECT id, credit_card_id, category, reward_rate_bps, reward_cap_cents, created_at, updated_at
+SELECT id, credit_card_id, category_id, reward_rate_bps, reward_cap_cents, created_at, updated_at
 FROM card_reward_categories
 WHERE credit_card_id = $1
-ORDER BY reward_rate_bps DESC, category
+ORDER BY reward_rate_bps DESC, category_id
 `
 
 // Bonus-earning rules for a single card, highest rate first so the reward
@@ -51,7 +51,7 @@ func (q *Queries) ListCardRewardCategories(ctx context.Context, creditCardID uui
 		if err := rows.Scan(
 			&i.ID,
 			&i.CreditCardID,
-			&i.Category,
+			&i.CategoryID,
 			&i.RewardRateBps,
 			&i.RewardCapCents,
 			&i.CreatedAt,

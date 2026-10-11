@@ -9,18 +9,18 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
+	uuid "github.com/google/uuid"
 )
 
 const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transactions (
     plaid_transaction_id,
     account_id,
+    category_id,
     amount_cents,
     date,
     name,
     merchant_name,
-    category,
     pending,
     pending_transaction_id
 ) VALUES (
@@ -34,19 +34,19 @@ INSERT INTO transactions (
     $8,
     $9
 )
-RETURNING id, plaid_transaction_id, account_id, amount_cents, date, name, merchant_name, category, pending, pending_transaction_id, created_at, updated_at
+RETURNING id, plaid_transaction_id, account_id, category_id, amount_cents, date, name, merchant_name, pending, pending_transaction_id, created_at, updated_at
 `
 
 type CreateTransactionParams struct {
-	PlaidTransactionID   string    `json:"plaid_transaction_id"`
-	AccountID            uuid.UUID `json:"account_id"`
-	AmountCents          int64     `json:"amount_cents"`
-	Date                 time.Time `json:"date"`
-	Name                 string    `json:"name"`
-	MerchantName         *string   `json:"merchant_name"`
-	Category             *string   `json:"category"`
-	Pending              bool      `json:"pending"`
-	PendingTransactionID *string   `json:"pending_transaction_id"`
+	PlaidTransactionID   string     `json:"plaid_transaction_id"`
+	AccountID            uuid.UUID  `json:"account_id"`
+	CategoryID           *uuid.UUID `json:"category_id"`
+	AmountCents          int64      `json:"amount_cents"`
+	Date                 time.Time  `json:"date"`
+	Name                 string     `json:"name"`
+	MerchantName         *string    `json:"merchant_name"`
+	Pending              bool       `json:"pending"`
+	PendingTransactionID *string    `json:"pending_transaction_id"`
 }
 
 // Inserts a transaction. Plaid's transaction ids are unique, so re-running a
@@ -57,11 +57,11 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	row := q.db.QueryRow(ctx, createTransaction,
 		arg.PlaidTransactionID,
 		arg.AccountID,
+		arg.CategoryID,
 		arg.AmountCents,
 		arg.Date,
 		arg.Name,
 		arg.MerchantName,
-		arg.Category,
 		arg.Pending,
 		arg.PendingTransactionID,
 	)
@@ -70,11 +70,11 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.ID,
 		&i.PlaidTransactionID,
 		&i.AccountID,
+		&i.CategoryID,
 		&i.AmountCents,
 		&i.Date,
 		&i.Name,
 		&i.MerchantName,
-		&i.Category,
 		&i.Pending,
 		&i.PendingTransactionID,
 		&i.CreatedAt,
@@ -84,7 +84,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 }
 
 const listTransactionsByAccount = `-- name: ListTransactionsByAccount :many
-SELECT id, plaid_transaction_id, account_id, amount_cents, date, name, merchant_name, category, pending, pending_transaction_id, created_at, updated_at
+SELECT id, plaid_transaction_id, account_id, category_id, amount_cents, date, name, merchant_name, pending, pending_transaction_id, created_at, updated_at
 FROM transactions
 WHERE account_id = $1
   AND date >= $2
@@ -111,11 +111,11 @@ func (q *Queries) ListTransactionsByAccount(ctx context.Context, arg ListTransac
 			&i.ID,
 			&i.PlaidTransactionID,
 			&i.AccountID,
+			&i.CategoryID,
 			&i.AmountCents,
 			&i.Date,
 			&i.Name,
 			&i.MerchantName,
-			&i.Category,
 			&i.Pending,
 			&i.PendingTransactionID,
 			&i.CreatedAt,
@@ -132,7 +132,7 @@ func (q *Queries) ListTransactionsByAccount(ctx context.Context, arg ListTransac
 }
 
 const listTransactionsByUser = `-- name: ListTransactionsByUser :many
-SELECT t.id, t.plaid_transaction_id, t.account_id, t.amount_cents, t.date, t.name, t.merchant_name, t.category, t.pending, t.pending_transaction_id, t.created_at, t.updated_at
+SELECT t.id, t.plaid_transaction_id, t.account_id, t.category_id, t.amount_cents, t.date, t.name, t.merchant_name, t.pending, t.pending_transaction_id, t.created_at, t.updated_at
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 JOIN plaid_items i ON i.id = a.plaid_item_id
@@ -162,11 +162,11 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactio
 			&i.ID,
 			&i.PlaidTransactionID,
 			&i.AccountID,
+			&i.CategoryID,
 			&i.AmountCents,
 			&i.Date,
 			&i.Name,
 			&i.MerchantName,
-			&i.Category,
 			&i.Pending,
 			&i.PendingTransactionID,
 			&i.CreatedAt,

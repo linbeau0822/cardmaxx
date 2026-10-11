@@ -56,65 +56,11 @@ CREATE TRIGGER plaid_items_set_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- accounts
--- ---------------------------------------------------------------------------
--- A depository or credit account exposed by a Plaid Item. type/subtype mirror
--- Plaid's taxonomy (e.g. type='credit', subtype='credit card').
-CREATE TABLE accounts (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    plaid_item_id    UUID NOT NULL REFERENCES plaid_items (id) ON DELETE CASCADE,
-    plaid_account_id TEXT NOT NULL UNIQUE,
-    name             TEXT NOT NULL,
-    official_name    TEXT,
-    type             TEXT NOT NULL,
-    subtype          TEXT,
-    mask             TEXT,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX accounts_plaid_item_id_idx ON accounts (plaid_item_id);
-
-CREATE TRIGGER accounts_set_updated_at
-    BEFORE UPDATE ON accounts
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
--- ---------------------------------------------------------------------------
--- transactions
--- ---------------------------------------------------------------------------
--- amount_cents follows Plaid's sign convention: positive values are money
--- leaving the account (purchases), negative values are credits/refunds.
--- category holds a normalised CardWise spending category; it is nullable
--- because categorisation happens after ingestion (Phase 3).
-CREATE TABLE transactions (
-    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    plaid_transaction_id   TEXT NOT NULL UNIQUE,
-    account_id             UUID NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
-    amount_cents           BIGINT NOT NULL,
-    date                   DATE NOT NULL,
-    name                   TEXT NOT NULL,
-    merchant_name          TEXT,
-    category               TEXT,
-    pending                BOOLEAN NOT NULL DEFAULT FALSE,
-    pending_transaction_id TEXT,
-    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Spending analysis reads transactions per account over a date range.
-CREATE INDEX transactions_account_id_date_idx ON transactions (account_id, date DESC);
--- Category aggregation (Phase 3) scans by category over a date range.
-CREATE INDEX transactions_category_date_idx ON transactions (category, date DESC);
-
-CREATE TRIGGER transactions_set_updated_at
-    BEFORE UPDATE ON transactions
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
--- ---------------------------------------------------------------------------
 -- credit_cards
 -- ---------------------------------------------------------------------------
 -- The catalogue of cards CardWise can reason about. base_reward_rate_bps is
 -- the rate earned on spend that matches no bonus category (e.g. 150 = 1.5%).
+-- Created before accounts/categories because both reference it.
 CREATE TABLE credit_cards (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                 TEXT NOT NULL,
@@ -131,6 +77,78 @@ CREATE TRIGGER credit_cards_set_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- categories
+-- ---------------------------------------------------------------------------
+-- Shared spending-category vocabulary. transactions and card_reward_categories
+-- both reference this instead of each holding their own free-text category, so
+-- a transaction's category and a card's bonus-category rule can only ever
+-- refer to the same row.
+CREATE TABLE categories (
+    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE
+);
+
+-- ---------------------------------------------------------------------------
+-- accounts
+-- ---------------------------------------------------------------------------
+-- A depository or credit account exposed by a Plaid Item. type/subtype mirror
+-- Plaid's taxonomy (e.g. type='credit', subtype='credit card').
+-- credit_card_id links the account to the catalogue entry describing its
+-- reward rules; it is nullable because matching a synced account to a
+-- catalogue card is not always automatic (Phase 4).
+CREATE TABLE accounts (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plaid_item_id    UUID NOT NULL REFERENCES plaid_items (id) ON DELETE CASCADE,
+    credit_card_id   UUID REFERENCES credit_cards (id) ON DELETE SET NULL,
+    plaid_account_id TEXT NOT NULL UNIQUE,
+    name             TEXT NOT NULL,
+    official_name    TEXT,
+    type             TEXT NOT NULL,
+    subtype          TEXT,
+    mask             TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX accounts_plaid_item_id_idx ON accounts (plaid_item_id);
+CREATE INDEX accounts_credit_card_id_idx ON accounts (credit_card_id);
+
+CREATE TRIGGER accounts_set_updated_at
+    BEFORE UPDATE ON accounts
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- transactions
+-- ---------------------------------------------------------------------------
+-- amount_cents follows Plaid's sign convention: positive values are money
+-- leaving the account (purchases), negative values are credits/refunds.
+-- category_id is nullable because categorisation happens after ingestion
+-- (Phase 3).
+CREATE TABLE transactions (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plaid_transaction_id   TEXT NOT NULL UNIQUE,
+    account_id             UUID NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    category_id            UUID REFERENCES categories (id),
+    amount_cents           BIGINT NOT NULL,
+    date                   DATE NOT NULL,
+    name                   TEXT NOT NULL,
+    merchant_name          TEXT,
+    pending                BOOLEAN NOT NULL DEFAULT FALSE,
+    pending_transaction_id TEXT,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Spending analysis reads transactions per account over a date range.
+CREATE INDEX transactions_account_id_date_idx ON transactions (account_id, date DESC);
+-- Category aggregation (Phase 3) scans by category over a date range.
+CREATE INDEX transactions_category_date_idx ON transactions (category_id, date DESC);
+
+CREATE TRIGGER transactions_set_updated_at
+    BEFORE UPDATE ON transactions
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- card_reward_categories
 -- ---------------------------------------------------------------------------
 -- Bonus earning rules for a card. reward_cap_cents is the amount of spend per
@@ -140,16 +158,18 @@ CREATE TRIGGER credit_cards_set_updated_at
 CREATE TABLE card_reward_categories (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     credit_card_id   UUID NOT NULL REFERENCES credit_cards (id) ON DELETE CASCADE,
-    category         TEXT NOT NULL,
+    category_id      UUID NOT NULL REFERENCES categories (id),
     reward_rate_bps  INTEGER NOT NULL CHECK (reward_rate_bps >= 0),
     reward_cap_cents BIGINT CHECK (reward_cap_cents > 0),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (credit_card_id, category)
+    UNIQUE (credit_card_id, category_id)
 );
 
 CREATE INDEX card_reward_categories_credit_card_id_idx
     ON card_reward_categories (credit_card_id);
+CREATE INDEX card_reward_categories_category_id_idx
+    ON card_reward_categories (category_id);
 
 CREATE TRIGGER card_reward_categories_set_updated_at
     BEFORE UPDATE ON card_reward_categories

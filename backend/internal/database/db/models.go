@@ -7,30 +7,36 @@ package db
 import (
 	"time"
 
-	"github.com/google/uuid"
+	uuid "github.com/google/uuid"
 )
 
 type Account struct {
-	ID             uuid.UUID `json:"id"`
-	PlaidItemID    uuid.UUID `json:"plaid_item_id"`
-	PlaidAccountID string    `json:"plaid_account_id"`
-	Name           string    `json:"name"`
-	OfficialName   *string   `json:"official_name"`
-	Type           string    `json:"type"`
-	Subtype        *string   `json:"subtype"`
-	Mask           *string   `json:"mask"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             uuid.UUID  `json:"id"`
+	PlaidItemID    uuid.UUID  `json:"plaid_item_id"`
+	CreditCardID   *uuid.UUID `json:"credit_card_id"`
+	PlaidAccountID string     `json:"plaid_account_id"`
+	Name           string     `json:"name"`
+	OfficialName   *string    `json:"official_name"`
+	Type           string     `json:"type"`
+	Subtype        *string    `json:"subtype"`
+	Mask           *string    `json:"mask"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type CardRewardCategory struct {
 	ID             uuid.UUID `json:"id"`
 	CreditCardID   uuid.UUID `json:"credit_card_id"`
-	Category       string    `json:"category"`
+	CategoryID     uuid.UUID `json:"category_id"`
 	RewardRateBps  int32     `json:"reward_rate_bps"`
 	RewardCapCents *int64    `json:"reward_cap_cents"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type Category struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 type CreditCard struct {
@@ -54,18 +60,18 @@ type PlaidItem struct {
 }
 
 type Transaction struct {
-	ID                   uuid.UUID `json:"id"`
-	PlaidTransactionID   string    `json:"plaid_transaction_id"`
-	AccountID            uuid.UUID `json:"account_id"`
-	AmountCents          int64     `json:"amount_cents"`
-	Date                 time.Time `json:"date"`
-	Name                 string    `json:"name"`
-	MerchantName         *string   `json:"merchant_name"`
-	Category             *string   `json:"category"`
-	Pending              bool      `json:"pending"`
-	PendingTransactionID *string   `json:"pending_transaction_id"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	ID                   uuid.UUID  `json:"id"`
+	PlaidTransactionID   string     `json:"plaid_transaction_id"`
+	AccountID            uuid.UUID  `json:"account_id"`
+	CategoryID           *uuid.UUID `json:"category_id"`
+	AmountCents          int64      `json:"amount_cents"`
+	Date                 time.Time  `json:"date"`
+	Name                 string     `json:"name"`
+	MerchantName         *string    `json:"merchant_name"`
+	Pending              bool       `json:"pending"`
+	PendingTransactionID *string    `json:"pending_transaction_id"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 type User struct {

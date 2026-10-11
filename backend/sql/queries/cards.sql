@@ -11,4 +11,4 @@ SELECT * FROM credit_cards WHERE id = @id;
 SELECT *
 FROM card_reward_categories
 WHERE credit_card_id = @credit_card_id
-ORDER BY reward_rate_bps DESC, category;
+ORDER BY reward_rate_bps DESC, category_id;

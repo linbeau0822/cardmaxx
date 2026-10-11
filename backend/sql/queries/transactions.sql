@@ -6,21 +6,21 @@
 INSERT INTO transactions (
     plaid_transaction_id,
     account_id,
+    category_id,
     amount_cents,
     date,
     name,
     merchant_name,
-    category,
     pending,
     pending_transaction_id
 ) VALUES (
     @plaid_transaction_id,
     @account_id,
+    @category_id,
     @amount_cents,
     @date,
     @name,
     @merchant_name,
-    @category,
     @pending,
     @pending_transaction_id
 )

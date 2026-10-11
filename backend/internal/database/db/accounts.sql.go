@@ -8,11 +8,11 @@ package db
 import (
 	"context"
 
-	"github.com/google/uuid"
+	uuid "github.com/google/uuid"
 )
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, plaid_item_id, plaid_account_id, name, official_name, type, subtype, mask, created_at, updated_at FROM accounts WHERE id = $1
+SELECT id, plaid_item_id, credit_card_id, plaid_account_id, name, official_name, type, subtype, mask, created_at, updated_at FROM accounts WHERE id = $1
 `
 
 func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error) {
@@ -21,6 +21,7 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	err := row.Scan(
 		&i.ID,
 		&i.PlaidItemID,
+		&i.CreditCardID,
 		&i.PlaidAccountID,
 		&i.Name,
 		&i.OfficialName,
@@ -34,7 +35,7 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 }
 
 const listAccountsByUser = `-- name: ListAccountsByUser :many
-SELECT a.id, a.plaid_item_id, a.plaid_account_id, a.name, a.official_name, a.type, a.subtype, a.mask, a.created_at, a.updated_at
+SELECT a.id, a.plaid_item_id, a.credit_card_id, a.plaid_account_id, a.name, a.official_name, a.type, a.subtype, a.mask, a.created_at, a.updated_at
 FROM accounts a
 JOIN plaid_items i ON i.id = a.plaid_item_id
 WHERE i.user_id = $1
@@ -53,6 +54,7 @@ func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]A
 		if err := rows.Scan(
 			&i.ID,
 			&i.PlaidItemID,
+			&i.CreditCardID,
 			&i.PlaidAccountID,
 			&i.Name,
 			&i.OfficialName,
