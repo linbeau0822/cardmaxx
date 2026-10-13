@@ -76,7 +76,7 @@ export default function App() {
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">CardWise</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">CardMaxx</h1>
             <p className="mt-1 text-sm text-ink-muted">
               Analyze your spending and find the credit cards that pay you more.
             </p>

@@ -1,4 +1,4 @@
-// Command server runs the CardWise HTTP API.
+// Command server runs the CardMaxx HTTP API.
 //
 // Start-up order is deliberate: configuration is validated, then the database
 // is reached, then the HTTP server is started. Anything that would make the
@@ -116,7 +116,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	return <-serveErr
 }
 
-// bootstrapUser returns the single implicit user CardWise runs as until
+// bootstrapUser returns the single implicit user CardMaxx runs as until
 // Phase 8 adds authentication, creating it on first run.
 func bootstrapUser(ctx context.Context, queries *db.Queries) (uuid.UUID, error) {
 	user, err := queries.GetFirstUser(ctx)

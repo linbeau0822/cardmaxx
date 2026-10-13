@@ -34,7 +34,7 @@ type Querier interface {
 	// Called after each page of /transactions/sync so a later page's failure
 	// does not re-fetch transactions the previous page already persisted.
 	UpdatePlaidItemCursor(ctx context.Context, arg UpdatePlaidItemCursorParams) error
-	// Account metadata rarely changes, but a sync is the only time CardWise
+	// Account metadata rarely changes, but a sync is the only time CardMaxx
 	// hears about it again, so each sync re-asserts the latest copy.
 	UpsertAccount(ctx context.Context, arg UpsertAccountParams) (Account, error)
 	// Plaid's sync feed reports the same transaction again when it is modified

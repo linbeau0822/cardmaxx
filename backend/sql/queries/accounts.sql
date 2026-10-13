@@ -12,7 +12,7 @@ SELECT * FROM accounts WHERE id = @id;
 SELECT * FROM accounts WHERE plaid_account_id = @plaid_account_id;
 
 -- name: UpsertAccount :one
--- Account metadata rarely changes, but a sync is the only time CardWise
+-- Account metadata rarely changes, but a sync is the only time CardMaxx
 -- hears about it again, so each sync re-asserts the latest copy.
 INSERT INTO accounts (
     plaid_item_id,

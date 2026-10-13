@@ -1,13 +1,13 @@
-# CardWise
+# CardMaxx
 
-CardWise is a personal credit-card spending analyzer and recommendation engine.
+CardMaxx is a personal credit-card spending analyzer and recommendation engine.
 It connects a user's financial accounts through [Plaid](https://plaid.com),
 imports their transaction history, categorizes and aggregates their spending,
 calculates the rewards their current cards actually earn, and identifies the
 cards — or combinations of cards — that would earn them more.
 
 The core philosophy is **deterministic financial calculations first, AI
-explanations second**. Every number CardWise reports comes from explicit,
+explanations second**. Every number CardMaxx reports comes from explicit,
 testable arithmetic over real transactions. An LLM may later put that reasoning
 into words; it never produces the numbers.
 
@@ -119,7 +119,7 @@ External services sit behind their own boundary:
 
 ```text
 Plaid API  →  plaid.Client   HTTP transport, wire-format conversion
-           →  application    sees CardWise domain types only
+           →  application    sees CardMaxx domain types only
 ```
 
 Nothing outside `internal/plaid` imports a Plaid type, and Plaid access tokens
@@ -162,7 +162,7 @@ Everything else is the standard library.
 ## Project Structure
 
 ```text
-cardwise/
+cardmaxx/
 ├── backend/
 │   ├── cmd/server/            Entry point: config → database → router → server
 │   ├── internal/
@@ -462,11 +462,11 @@ Two conventions matter:
    hand-written SQL compiled to type-safe Go by sqlc. There is no ORM and no
    query builder to reason around.
 6. **Keep external integrations behind clear boundaries.** Only
-   `internal/plaid` knows Plaid exists; it exposes CardWise's own types, so it
+   `internal/plaid` knows Plaid exists; it exposes CardMaxx's own types, so it
    can be faked or replaced without touching callers.
 7. **Security and privacy are first-order concerns.** This application handles
    financial data: access tokens stay server-side, every query is scoped by
    user, and secrets live only in the environment.
 8. **Optimize for maintainability and technical depth, not technology count.**
-   The interesting parts of CardWise are the data model, the reward
+   The interesting parts of CardMaxx are the data model, the reward
    calculations and the optimization problem — not the size of the stack.
