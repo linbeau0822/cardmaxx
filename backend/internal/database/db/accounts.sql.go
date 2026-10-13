@@ -34,6 +34,29 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	return i, err
 }
 
+const getAccountByPlaidAccountID = `-- name: GetAccountByPlaidAccountID :one
+SELECT id, plaid_item_id, credit_card_id, plaid_account_id, name, official_name, type, subtype, mask, created_at, updated_at FROM accounts WHERE plaid_account_id = $1
+`
+
+func (q *Queries) GetAccountByPlaidAccountID(ctx context.Context, plaidAccountID string) (Account, error) {
+	row := q.db.QueryRow(ctx, getAccountByPlaidAccountID, plaidAccountID)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.PlaidItemID,
+		&i.CreditCardID,
+		&i.PlaidAccountID,
+		&i.Name,
+		&i.OfficialName,
+		&i.Type,
+		&i.Subtype,
+		&i.Mask,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAccountsByUser = `-- name: ListAccountsByUser :many
 SELECT a.id, a.plaid_item_id, a.credit_card_id, a.plaid_account_id, a.name, a.official_name, a.type, a.subtype, a.mask, a.created_at, a.updated_at
 FROM accounts a
@@ -72,4 +95,70 @@ func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]A
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertAccount = `-- name: UpsertAccount :one
+INSERT INTO accounts (
+    plaid_item_id,
+    plaid_account_id,
+    name,
+    official_name,
+    type,
+    subtype,
+    mask
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (plaid_account_id) DO UPDATE SET
+    name          = EXCLUDED.name,
+    official_name = EXCLUDED.official_name,
+    type          = EXCLUDED.type,
+    subtype       = EXCLUDED.subtype,
+    mask          = EXCLUDED.mask
+RETURNING id, plaid_item_id, credit_card_id, plaid_account_id, name, official_name, type, subtype, mask, created_at, updated_at
+`
+
+type UpsertAccountParams struct {
+	PlaidItemID    uuid.UUID `json:"plaid_item_id"`
+	PlaidAccountID string    `json:"plaid_account_id"`
+	Name           string    `json:"name"`
+	OfficialName   *string   `json:"official_name"`
+	Type           string    `json:"type"`
+	Subtype        *string   `json:"subtype"`
+	Mask           *string   `json:"mask"`
+}
+
+// Account metadata rarely changes, but a sync is the only time CardWise
+// hears about it again, so each sync re-asserts the latest copy.
+func (q *Queries) UpsertAccount(ctx context.Context, arg UpsertAccountParams) (Account, error) {
+	row := q.db.QueryRow(ctx, upsertAccount,
+		arg.PlaidItemID,
+		arg.PlaidAccountID,
+		arg.Name,
+		arg.OfficialName,
+		arg.Type,
+		arg.Subtype,
+		arg.Mask,
+	)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.PlaidItemID,
+		&i.CreditCardID,
+		&i.PlaidAccountID,
+		&i.Name,
+		&i.OfficialName,
+		&i.Type,
+		&i.Subtype,
+		&i.Mask,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

@@ -15,10 +15,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
 	"github.com/linbeau0822/cardmaxx/backend/internal/api"
 	"github.com/linbeau0822/cardmaxx/backend/internal/config"
 	"github.com/linbeau0822/cardmaxx/backend/internal/database"
+	"github.com/linbeau0822/cardmaxx/backend/internal/database/db"
 	"github.com/linbeau0822/cardmaxx/backend/internal/plaid"
+	"github.com/linbeau0822/cardmaxx/backend/internal/service"
 )
 
 func main() {
@@ -43,9 +48,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
-	// Nothing queries yet, but connecting here fails a misconfigured database
-	// at start-up instead of on the first request that needs one.
-	// TODO(phase-2): pass db.New(pool) to the handlers that need it.
 	pool, err := database.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
@@ -53,8 +55,17 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	defer pool.Close()
 	logger.Info("connected to database")
 
-	// TODO(phase-2): hand this to the Plaid handlers. Constructing it here
-	// validates PLAID_ENV before the server accepts traffic.
+	queries := db.New(pool)
+
+	// Authentication does not exist yet (Phase 8), so the application runs as
+	// a single implicit user. Failing to find or create it is a start-up
+	// failure, same as an unreachable database.
+	currentUserID, err := bootstrapUser(ctx, queries)
+	if err != nil {
+		return fmt.Errorf("bootstrap user: %w", err)
+	}
+	logger.Info("running as implicit user", slog.String("user_id", currentUserID.String()))
+
 	plaidClient, err := plaid.NewClient(cfg.Plaid)
 	if err != nil {
 		return fmt.Errorf("create plaid client: %w", err)
@@ -63,10 +74,11 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		slog.String("env", string(cfg.Plaid.Env)),
 		slog.String("base_url", plaidClient.BaseURL()),
 	)
+	plaidSvc := service.NewPlaidService(queries, plaidClient)
 
 	srv := &http.Server{
 		Addr:              cfg.Server.Addr(),
-		Handler:           api.NewRouter(cfg.Server, logger),
+		Handler:           api.NewRouter(cfg.Server, logger, plaidSvc, currentUserID),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
@@ -102,4 +114,21 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	return <-serveErr
+}
+
+// bootstrapUser returns the single implicit user CardWise runs as until
+// Phase 8 adds authentication, creating it on first run.
+func bootstrapUser(ctx context.Context, queries *db.Queries) (uuid.UUID, error) {
+	user, err := queries.GetFirstUser(ctx)
+	if err == nil {
+		return user.ID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.UUID{}, fmt.Errorf("look up user: %w", err)
+	}
+	user, err = queries.CreateUser(ctx)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("create user: %w", err)
+	}
+	return user.ID, nil
 }

@@ -12,75 +12,13 @@ import (
 	uuid "github.com/google/uuid"
 )
 
-const createTransaction = `-- name: CreateTransaction :one
-INSERT INTO transactions (
-    plaid_transaction_id,
-    account_id,
-    category_id,
-    amount_cents,
-    date,
-    name,
-    merchant_name,
-    pending,
-    pending_transaction_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9
-)
-RETURNING id, plaid_transaction_id, account_id, category_id, amount_cents, date, name, merchant_name, pending, pending_transaction_id, created_at, updated_at
+const deleteTransactionByPlaidID = `-- name: DeleteTransactionByPlaidID :exec
+DELETE FROM transactions WHERE plaid_transaction_id = $1
 `
 
-type CreateTransactionParams struct {
-	PlaidTransactionID   string     `json:"plaid_transaction_id"`
-	AccountID            uuid.UUID  `json:"account_id"`
-	CategoryID           *uuid.UUID `json:"category_id"`
-	AmountCents          int64      `json:"amount_cents"`
-	Date                 time.Time  `json:"date"`
-	Name                 string     `json:"name"`
-	MerchantName         *string    `json:"merchant_name"`
-	Pending              bool       `json:"pending"`
-	PendingTransactionID *string    `json:"pending_transaction_id"`
-}
-
-// Inserts a transaction. Plaid's transaction ids are unique, so re-running a
-// sync that already persisted a row returns a unique-violation error rather
-// than silently duplicating spend. Phase 2 replaces this with an upsert that
-// also handles Plaid's "modified" and pending-to-posted transitions.
-func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
-	row := q.db.QueryRow(ctx, createTransaction,
-		arg.PlaidTransactionID,
-		arg.AccountID,
-		arg.CategoryID,
-		arg.AmountCents,
-		arg.Date,
-		arg.Name,
-		arg.MerchantName,
-		arg.Pending,
-		arg.PendingTransactionID,
-	)
-	var i Transaction
-	err := row.Scan(
-		&i.ID,
-		&i.PlaidTransactionID,
-		&i.AccountID,
-		&i.CategoryID,
-		&i.AmountCents,
-		&i.Date,
-		&i.Name,
-		&i.MerchantName,
-		&i.Pending,
-		&i.PendingTransactionID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) DeleteTransactionByPlaidID(ctx context.Context, plaidTransactionID string) error {
+	_, err := q.db.Exec(ctx, deleteTransactionByPlaidID, plaidTransactionID)
+	return err
 }
 
 const listTransactionsByAccount = `-- name: ListTransactionsByAccount :many
@@ -180,4 +118,81 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactio
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertTransaction = `-- name: UpsertTransaction :one
+INSERT INTO transactions (
+    plaid_transaction_id,
+    account_id,
+    category_id,
+    amount_cents,
+    date,
+    name,
+    merchant_name,
+    pending,
+    pending_transaction_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9
+)
+ON CONFLICT (plaid_transaction_id) DO UPDATE SET
+    amount_cents           = EXCLUDED.amount_cents,
+    date                    = EXCLUDED.date,
+    name                    = EXCLUDED.name,
+    merchant_name           = EXCLUDED.merchant_name,
+    pending                 = EXCLUDED.pending,
+    pending_transaction_id  = EXCLUDED.pending_transaction_id
+RETURNING id, plaid_transaction_id, account_id, category_id, amount_cents, date, name, merchant_name, pending, pending_transaction_id, created_at, updated_at
+`
+
+type UpsertTransactionParams struct {
+	PlaidTransactionID   string     `json:"plaid_transaction_id"`
+	AccountID            uuid.UUID  `json:"account_id"`
+	CategoryID           *uuid.UUID `json:"category_id"`
+	AmountCents          int64      `json:"amount_cents"`
+	Date                 time.Time  `json:"date"`
+	Name                 string     `json:"name"`
+	MerchantName         *string    `json:"merchant_name"`
+	Pending              bool       `json:"pending"`
+	PendingTransactionID *string    `json:"pending_transaction_id"`
+}
+
+// Plaid's sync feed reports the same transaction again when it is modified
+// (e.g. a pending charge posting), so re-running a sync updates the existing
+// row instead of erroring on the unique plaid_transaction_id.
+func (q *Queries) UpsertTransaction(ctx context.Context, arg UpsertTransactionParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, upsertTransaction,
+		arg.PlaidTransactionID,
+		arg.AccountID,
+		arg.CategoryID,
+		arg.AmountCents,
+		arg.Date,
+		arg.Name,
+		arg.MerchantName,
+		arg.Pending,
+		arg.PendingTransactionID,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.PlaidTransactionID,
+		&i.AccountID,
+		&i.CategoryID,
+		&i.AmountCents,
+		&i.Date,
+		&i.Name,
+		&i.MerchantName,
+		&i.Pending,
+		&i.PendingTransactionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

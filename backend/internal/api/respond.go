@@ -14,6 +14,7 @@ const (
 	CodeNotFound         ErrorCode = "not_found"
 	CodeMethodNotAllowed ErrorCode = "method_not_allowed"
 	CodeNotImplemented   ErrorCode = "not_implemented"
+	CodeBadRequest       ErrorCode = "bad_request"
 	CodeInternal         ErrorCode = "internal_error"
 )
 
