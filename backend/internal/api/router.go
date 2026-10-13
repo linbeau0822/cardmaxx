@@ -9,8 +9,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 
 	"github.com/linbeau0822/cardmaxx/backend/internal/config"
+	"github.com/linbeau0822/cardmaxx/backend/internal/service"
 )
 
 // requestTimeout bounds how long a handler may run. It sits inside the
@@ -20,10 +22,10 @@ const requestTimeout = 25 * time.Second
 
 // NewRouter builds the application's HTTP handler.
 //
-// Handlers take no dependencies: /health needs none and every other route is a
-// 501 placeholder. Dependencies get a parameter here when a handler first
-// needs one.
-func NewRouter(cfg config.ServerConfig, logger *slog.Logger) http.Handler {
+// currentUserID stands in for authentication (Phase 8): every Phase 2 route
+// acts on this one implicit user.
+func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.PlaidService, currentUserID uuid.UUID) http.Handler {
+	srv := &Server{plaid: plaidSvc, currentUserID: currentUserID, logger: logger}
 	r := chi.NewRouter()
 
 	// Order matters: RequestID must run before the logger so every line is
@@ -49,13 +51,13 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/plaid", func(r chi.Router) {
-			r.Post("/link-token", notImplemented("phase 2 (Plaid integration)"))
-			r.Post("/exchange-token", notImplemented("phase 2 (Plaid integration)"))
-			r.Post("/sync", notImplemented("phase 2 (Plaid integration)"))
+			r.Post("/link-token", srv.handleCreateLinkToken)
+			r.Post("/exchange-token", srv.handleExchangeToken)
+			r.Post("/sync", srv.handleSync)
 		})
 
-		r.Get("/accounts", notImplemented("phase 2 (Plaid integration)"))
-		r.Get("/transactions", notImplemented("phase 2 (Plaid integration)"))
+		r.Get("/accounts", srv.handleListAccounts)
+		r.Get("/transactions", srv.handleListTransactions)
 		r.Get("/cards", notImplemented("phase 4 (reward engine)"))
 		r.Get("/analysis/spending", notImplemented("phase 3 (spending analysis)"))
 		r.Get("/recommendations", notImplemented("phase 5 (recommendations)"))

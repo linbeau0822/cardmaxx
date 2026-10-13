@@ -11,23 +11,36 @@ import (
 )
 
 type Querier interface {
-	// Inserts a transaction. Plaid's transaction ids are unique, so re-running a
-	// sync that already persisted a row returns a unique-violation error rather
-	// than silently duplicating spend. Phase 2 replaces this with an upsert that
-	// also handles Plaid's "modified" and pending-to-posted transitions.
-	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
+	CreatePlaidItem(ctx context.Context, arg CreatePlaidItemParams) (PlaidItem, error)
+	CreateUser(ctx context.Context) (User, error)
+	DeleteTransactionByPlaidID(ctx context.Context, plaidTransactionID string) error
 	GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
+	GetAccountByPlaidAccountID(ctx context.Context, plaidAccountID string) (Account, error)
 	GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, error)
+	// There is no authentication yet (Phase 8), so the application runs as a
+	// single implicit user. This finds it.
+	GetFirstUser(ctx context.Context) (User, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	// Bonus-earning rules for a single card, highest rate first so the reward
 	// engine can evaluate the most valuable rule first.
 	ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]CardRewardCategory, error)
 	// The credit-card catalogue is global reference data, not per-user.
 	ListCreditCards(ctx context.Context) ([]CreditCard, error)
+	ListPlaidItemsByUser(ctx context.Context, userID uuid.UUID) ([]PlaidItem, error)
 	ListTransactionsByAccount(ctx context.Context, arg ListTransactionsByAccountParams) ([]Transaction, error)
 	// Transactions are owned transitively: transaction -> account -> plaid_item -> user.
 	// Every read is scoped by user so no query can leak another user's spend.
 	ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]Transaction, error)
+	// Called after each page of /transactions/sync so a later page's failure
+	// does not re-fetch transactions the previous page already persisted.
+	UpdatePlaidItemCursor(ctx context.Context, arg UpdatePlaidItemCursorParams) error
+	// Account metadata rarely changes, but a sync is the only time CardWise
+	// hears about it again, so each sync re-asserts the latest copy.
+	UpsertAccount(ctx context.Context, arg UpsertAccountParams) (Account, error)
+	// Plaid's sync feed reports the same transaction again when it is modified
+	// (e.g. a pending charge posting), so re-running a sync updates the existing
+	// row instead of erroring on the unique plaid_transaction_id.
+	UpsertTransaction(ctx context.Context, arg UpsertTransactionParams) (Transaction, error)
 }
 
 var _ Querier = (*Queries)(nil)

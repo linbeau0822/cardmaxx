@@ -1,8 +1,7 @@
--- name: CreateTransaction :one
--- Inserts a transaction. Plaid's transaction ids are unique, so re-running a
--- sync that already persisted a row returns a unique-violation error rather
--- than silently duplicating spend. Phase 2 replaces this with an upsert that
--- also handles Plaid's "modified" and pending-to-posted transitions.
+-- name: UpsertTransaction :one
+-- Plaid's sync feed reports the same transaction again when it is modified
+-- (e.g. a pending charge posting), so re-running a sync updates the existing
+-- row instead of erroring on the unique plaid_transaction_id.
 INSERT INTO transactions (
     plaid_transaction_id,
     account_id,
@@ -24,7 +23,17 @@ INSERT INTO transactions (
     @pending,
     @pending_transaction_id
 )
+ON CONFLICT (plaid_transaction_id) DO UPDATE SET
+    amount_cents           = EXCLUDED.amount_cents,
+    date                    = EXCLUDED.date,
+    name                    = EXCLUDED.name,
+    merchant_name           = EXCLUDED.merchant_name,
+    pending                 = EXCLUDED.pending,
+    pending_transaction_id  = EXCLUDED.pending_transaction_id
 RETURNING *;
+
+-- name: DeleteTransactionByPlaidID :exec
+DELETE FROM transactions WHERE plaid_transaction_id = @plaid_transaction_id;
 
 -- name: ListTransactionsByUser :many
 -- Transactions are owned transitively: transaction -> account -> plaid_item -> user.

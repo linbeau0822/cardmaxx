@@ -14,6 +14,7 @@ export type ApiErrorCode =
   | 'not_found'
   | 'method_not_allowed'
   | 'not_implemented'
+  | 'bad_request'
   | 'internal_error'
   | 'network_error'
 
@@ -69,15 +70,54 @@ export interface LinkTokenResponse {
   expiration: string
 }
 
+export interface ExchangeTokenResponse {
+  item_id: string
+}
+
+export interface ItemSyncResult {
+  plaid_item_id: string
+  added: number
+  modified: number
+  removed: number
+}
+
+export interface SyncResponse {
+  items: ItemSyncResult[]
+}
+
+export interface Transaction {
+  id: string
+  amount_cents: number
+  date: string
+  name: string
+  merchant_name: string | null
+  category_id: string | null
+  pending: boolean
+}
+
+export interface TransactionsResponse {
+  transactions: Transaction[]
+}
+
 export const api = {
-  /** Liveness check. The only endpoint implemented in the current phase. */
+  /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
 
-  /**
-   * Requests a Plaid Link token.
-   *
-   * TODO(phase-2): feed the returned token to Plaid Link, then POST the
-   * resulting public token to /api/v1/plaid/exchange-token.
-   */
+  /** Requests a Plaid Link token to open the Plaid Link widget. */
   createLinkToken: () => request<LinkTokenResponse>('/api/v1/plaid/link-token', { method: 'POST' }),
+
+  /** Exchanges the public token Plaid Link returns for a stored Item. */
+  exchangePublicToken: (publicToken: string) =>
+    request<ExchangeTokenResponse>('/api/v1/plaid/exchange-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_token: publicToken }),
+    }),
+
+  /** Pulls new transaction activity for every Item the current user has linked. */
+  sync: () => request<SyncResponse>('/api/v1/plaid/sync', { method: 'POST' }),
+
+  /** Lists the current user's transactions, most recent first. */
+  listTransactions: (limit = 100) =>
+    request<TransactionsResponse>(`/api/v1/transactions?limit=${limit}`),
 }
