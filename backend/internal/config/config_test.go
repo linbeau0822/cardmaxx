@@ -7,7 +7,7 @@ import (
 
 func setValidEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("DATABASE_URL", "postgres://cardwise:cardwise@localhost:5432/cardwise")
+	t.Setenv("DATABASE_URL", "postgres://cardmaxx:cardmaxx@localhost:5432/cardmaxx")
 	t.Setenv("PLAID_CLIENT_ID", "client-id")
 	t.Setenv("PLAID_SECRET", "secret")
 	t.Setenv("PLAID_ENV", "sandbox")
@@ -75,13 +75,13 @@ func TestLoadRejectsBadValues(t *testing.T) {
 
 func TestLoadParsesMultipleOrigins(t *testing.T) {
 	setValidEnv(t)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://cardwise.app ")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://cardmaxx.app ")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() returned error: %v", err)
 	}
-	want := []string{"http://localhost:5173", "https://cardwise.app"}
+	want := []string{"http://localhost:5173", "https://cardmaxx.app"}
 	if len(cfg.Server.AllowedOrigins) != len(want) {
 		t.Fatalf("AllowedOrigins = %v, want %v", cfg.Server.AllowedOrigins, want)
 	}

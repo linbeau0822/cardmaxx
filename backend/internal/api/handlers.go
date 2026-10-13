@@ -16,7 +16,7 @@ import (
 // Server holds the dependencies Phase 2's handlers need.
 //
 // currentUserID stands in for authentication, which does not exist until
-// Phase 8: CardWise runs as a single implicit user until then, and every
+// Phase 8: CardMaxx runs as a single implicit user until then, and every
 // handler scopes its queries to this id.
 type Server struct {
 	plaid         *service.PlaidService

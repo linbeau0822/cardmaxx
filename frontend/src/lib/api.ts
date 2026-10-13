@@ -1,5 +1,5 @@
 /**
- * Typed client for the CardWise API.
+ * Typed client for the CardMaxx API.
  *
  * Every call goes through `request`, which is the single place that knows the
  * backend's error envelope. Components therefore handle one error type instead
@@ -43,7 +43,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     })
   } catch (cause) {
-    throw new ApiError(0, 'network_error', 'Could not reach the CardWise API.', { cause })
+    throw new ApiError(0, 'network_error', 'Could not reach the CardMaxx API.', { cause })
   }
 
   if (!response.ok) {

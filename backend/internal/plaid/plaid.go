@@ -1,9 +1,9 @@
-// Package plaid is the boundary between CardWise and the Plaid API.
+// Package plaid is the boundary between CardMaxx and the Plaid API.
 //
 // Two rules hold this boundary:
 //
 //  1. Nothing outside this package imports a Plaid SDK or sees a Plaid wire
-//     type. The types declared here are CardWise's own, which is what makes it
+//     type. The types declared here are CardMaxx's own, which is what makes it
 //     possible to swap or mock the provider.
 //  2. Access tokens never leave the backend. They are written to plaid_items
 //     and read only by this package; no type here that carries a token is
@@ -46,7 +46,7 @@ type ItemCredentials struct {
 	AccessToken string
 }
 
-// Transaction is one transaction as CardWise models it, already converted off
+// Transaction is one transaction as CardMaxx models it, already converted off
 // Plaid's wire format. Amounts are integer cents, positive for money leaving
 // the account, matching the transactions table and Plaid's own sign
 // convention, so no sign flip happens at this boundary.
@@ -195,7 +195,7 @@ func (c *Client) call(ctx context.Context, path string, req, resp any) error {
 // CreateLinkToken requests a Link token for a user.
 func (c *Client) CreateLinkToken(ctx context.Context, userID uuid.UUID) (LinkToken, error) {
 	req := map[string]any{
-		"client_name":   "CardWise",
+		"client_name":   "CardMaxx",
 		"country_codes": []string{"US"},
 		"language":      "en",
 		"products":      []string{"transactions"},
@@ -227,7 +227,7 @@ func (c *Client) ExchangePublicToken(ctx context.Context, publicToken string) (I
 	return ItemCredentials{ItemID: resp.ItemID, AccessToken: resp.AccessToken}, nil
 }
 
-// plaidAccount and plaidTransaction mirror the fields CardWise needs from
+// plaidAccount and plaidTransaction mirror the fields CardMaxx needs from
 // Plaid's wire format for /transactions/sync.
 type plaidAccount struct {
 	AccountID    string  `json:"account_id"`

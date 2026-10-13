@@ -1,4 +1,4 @@
-# CardWise development tasks.
+# CardMaxx development tasks.
 #
 # Run `make` (or `make help`) to list every target.
 
@@ -101,7 +101,7 @@ db-reset: ## Destroy the database volume and recreate an empty, migrated schema
 	$(MAKE) migrate-up
 
 db-shell: ## Open a psql shell on the development database
-	docker compose exec postgres psql -U cardwise -d cardwise
+	docker compose exec postgres psql -U cardmaxx -d cardmaxx
 
 migrate-up: env-check ## Apply all pending migrations
 	cd $(BACKEND) && $(load_env) $(MIGRATE) -path $(MIGRATIONS) -database "$$DATABASE_URL" up

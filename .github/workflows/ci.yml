@@ -87,18 +87,18 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: cardwise
-          POSTGRES_PASSWORD: cardwise
-          POSTGRES_DB: cardwise_test
+          POSTGRES_USER: cardmaxx
+          POSTGRES_PASSWORD: cardmaxx
+          POSTGRES_DB: cardmaxx_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U cardwise"
+          --health-cmd "pg_isready -U cardmaxx"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://cardwise:cardwise@localhost:5432/cardwise_test?sslmode=disable
+      DATABASE_URL: postgres://cardmaxx:cardmaxx@localhost:5432/cardmaxx_test?sslmode=disable
     steps:
       - uses: actions/checkout@v5
 

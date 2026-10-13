@@ -1,6 +1,6 @@
-# CardWise frontend
+# CardMaxx frontend
 
-React + TypeScript + Vite dashboard for the CardWise API.
+React + TypeScript + Vite dashboard for the CardMaxx API.
 
 ```bash
 npm install

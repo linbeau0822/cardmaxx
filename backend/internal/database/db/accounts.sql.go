@@ -134,7 +134,7 @@ type UpsertAccountParams struct {
 	Mask           *string   `json:"mask"`
 }
 
-// Account metadata rarely changes, but a sync is the only time CardWise
+// Account metadata rarely changes, but a sync is the only time CardMaxx
 // hears about it again, so each sync re-asserts the latest copy.
 func (q *Queries) UpsertAccount(ctx context.Context, arg UpsertAccountParams) (Account, error) {
 	row := q.db.QueryRow(ctx, upsertAccount,

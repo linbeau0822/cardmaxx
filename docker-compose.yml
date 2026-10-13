@@ -3,12 +3,12 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: cardwise-postgres
+    container_name: cardmaxx-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: cardwise
-      POSTGRES_PASSWORD: cardwise
-      POSTGRES_DB: cardwise
+      POSTGRES_USER: cardmaxx
+      POSTGRES_PASSWORD: cardmaxx
+      POSTGRES_DB: cardmaxx
     ports:
       # Host port is configurable so the container does not clash with a
       # PostgreSQL already installed on the host. Keep DATABASE_URL in sync.
@@ -16,7 +16,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cardwise -d cardwise"]
+      test: ["CMD-SHELL", "pg_isready -U cardmaxx -d cardmaxx"]
       interval: 5s
       timeout: 5s
       retries: 10
