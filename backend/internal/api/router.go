@@ -59,7 +59,7 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.P
 		r.Get("/accounts", srv.handleListAccounts)
 		r.Get("/transactions", srv.handleListTransactions)
 		r.Get("/cards", notImplemented("phase 4 (reward engine)"))
-		r.Get("/analysis/spending", notImplemented("phase 3 (spending analysis)"))
+		r.Get("/analysis/spending", srv.handleSpendingAnalysis)
 		r.Get("/recommendations", notImplemented("phase 5 (recommendations)"))
 	})
 

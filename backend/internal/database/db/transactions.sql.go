@@ -70,10 +70,11 @@ func (q *Queries) ListTransactionsByAccount(ctx context.Context, arg ListTransac
 }
 
 const listTransactionsByUser = `-- name: ListTransactionsByUser :many
-SELECT t.id, t.plaid_transaction_id, t.account_id, t.category_id, t.amount_cents, t.date, t.name, t.merchant_name, t.pending, t.pending_transaction_id, t.created_at, t.updated_at
+SELECT t.id, t.plaid_transaction_id, t.account_id, t.category_id, t.amount_cents, t.date, t.name, t.merchant_name, t.pending, t.pending_transaction_id, t.created_at, t.updated_at, c.name AS category_name
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 JOIN plaid_items i ON i.id = a.plaid_item_id
+LEFT JOIN categories c ON c.id = t.category_id
 WHERE i.user_id = $1
 ORDER BY t.date DESC, t.id
 LIMIT $3 OFFSET $2
@@ -85,17 +86,35 @@ type ListTransactionsByUserParams struct {
 	ResultLimit  int32     `json:"result_limit"`
 }
 
+type ListTransactionsByUserRow struct {
+	ID                   uuid.UUID  `json:"id"`
+	PlaidTransactionID   string     `json:"plaid_transaction_id"`
+	AccountID            uuid.UUID  `json:"account_id"`
+	CategoryID           *uuid.UUID `json:"category_id"`
+	AmountCents          int64      `json:"amount_cents"`
+	Date                 time.Time  `json:"date"`
+	Name                 string     `json:"name"`
+	MerchantName         *string    `json:"merchant_name"`
+	Pending              bool       `json:"pending"`
+	PendingTransactionID *string    `json:"pending_transaction_id"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+	CategoryName         *string    `json:"category_name"`
+}
+
 // Transactions are owned transitively: transaction -> account -> plaid_item -> user.
 // Every read is scoped by user so no query can leak another user's spend.
-func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]Transaction, error) {
+// category_name is joined in so callers can display it without a second
+// lookup against the categories table.
+func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]ListTransactionsByUserRow, error) {
 	rows, err := q.db.Query(ctx, listTransactionsByUser, arg.UserID, arg.ResultOffset, arg.ResultLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Transaction{}
+	items := []ListTransactionsByUserRow{}
 	for rows.Next() {
-		var i Transaction
+		var i ListTransactionsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PlaidTransactionID,
@@ -109,6 +128,7 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactio
 			&i.PendingTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}
@@ -143,7 +163,8 @@ INSERT INTO transactions (
     $9
 )
 ON CONFLICT (plaid_transaction_id) DO UPDATE SET
-    amount_cents           = EXCLUDED.amount_cents,
+    category_id             = EXCLUDED.category_id,
+    amount_cents            = EXCLUDED.amount_cents,
     date                    = EXCLUDED.date,
     name                    = EXCLUDED.name,
     merchant_name           = EXCLUDED.merchant_name,

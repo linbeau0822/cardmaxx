@@ -31,7 +31,7 @@ export function TransactionsSidebar({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey])
 
   return (
-    <aside className="flex h-[calc(100vh-6rem)] w-72 flex-none flex-col rounded-xl border border-white/10 bg-surface-raised">
+    <aside className="flex w-72 flex-none flex-col rounded-xl border border-white/10 bg-surface-raised">
       <h2 className="flex-none border-b border-white/10 px-4 py-3 text-sm font-semibold text-ink">
         Transactions
       </h2>
@@ -51,7 +51,7 @@ export function TransactionsSidebar({ refreshKey }: { refreshKey: number }) {
                 </span>
               </div>
               <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-ink-muted">
-                <span>{t.category_id ? t.category_id : 'Uncategorized'}</span>
+                <span>{t.category_name ?? 'Uncategorized'}</span>
                 <span>{dateFormat.format(new Date(t.date))}</span>
               </div>
             </li>

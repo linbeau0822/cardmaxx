@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,7 +29,11 @@ type Querier interface {
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]db.Account, error)
 	UpsertTransaction(ctx context.Context, arg db.UpsertTransactionParams) (db.Transaction, error)
 	DeleteTransactionByPlaidID(ctx context.Context, plaidTransactionID string) error
-	ListTransactionsByUser(ctx context.Context, arg db.ListTransactionsByUserParams) ([]db.Transaction, error)
+	ListTransactionsByUser(ctx context.Context, arg db.ListTransactionsByUserParams) ([]db.ListTransactionsByUserRow, error)
+	GetOrCreateCategoryByName(ctx context.Context, name string) (db.Category, error)
+	GetSpendingByMonth(ctx context.Context, userID uuid.UUID) ([]db.GetSpendingByMonthRow, error)
+	GetSpendingByCategoryForMonth(ctx context.Context, arg db.GetSpendingByCategoryForMonthParams) ([]db.GetSpendingByCategoryForMonthRow, error)
+	GetAllCategoriesForUser(ctx context.Context, userID uuid.UUID) ([]string, error)
 }
 
 // PlaidClient is the slice of plaid.Client that PlaidService needs.
@@ -159,8 +164,8 @@ func (s *PlaidService) syncItem(ctx context.Context, item db.PlaidItem) (ItemSyn
 	return result, nil
 }
 
-// upsertTransaction resolves a Plaid transaction's account to its internal id
-// and persists it. category_id is left unset: categorisation is Phase 3.
+// upsertTransaction resolves a Plaid transaction's account and category to
+// their internal ids and persists it.
 func (s *PlaidService) upsertTransaction(ctx context.Context, t plaid.Transaction) error {
 	account, err := s.queries.GetAccountByPlaidAccountID(ctx, t.PlaidAccountID)
 	if err != nil {
@@ -174,9 +179,19 @@ func (s *PlaidService) upsertTransaction(ctx context.Context, t plaid.Transactio
 		return fmt.Errorf("look up account %s: %w", t.PlaidAccountID, err)
 	}
 
+	var categoryID *uuid.UUID
+	if t.Category != nil {
+		category, err := s.queries.GetOrCreateCategoryByName(ctx, *t.Category)
+		if err != nil {
+			return fmt.Errorf("resolve category %s: %w", *t.Category, err)
+		}
+		categoryID = &category.ID
+	}
+
 	_, err = s.queries.UpsertTransaction(ctx, db.UpsertTransactionParams{
 		PlaidTransactionID:   t.PlaidTransactionID,
 		AccountID:            account.ID,
+		CategoryID:           categoryID,
 		AmountCents:          t.AmountCents,
 		Date:                 t.Date,
 		Name:                 t.Name,
@@ -197,10 +212,27 @@ func (s *PlaidService) ListAccounts(ctx context.Context, userID uuid.UUID) ([]db
 
 // ListTransactions returns a page of the user's transactions, most recent
 // first.
-func (s *PlaidService) ListTransactions(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]db.Transaction, error) {
+func (s *PlaidService) ListTransactions(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]db.ListTransactionsByUserRow, error) {
 	return s.queries.ListTransactionsByUser(ctx, db.ListTransactionsByUserParams{
 		UserID:       userID,
 		ResultLimit:  limit,
 		ResultOffset: offset,
 	})
+}
+
+// SpendingByMonth totals the user's reward-eligible spend per calendar month.
+func (s *PlaidService) SpendingByMonth(ctx context.Context, userID uuid.UUID) ([]db.GetSpendingByMonthRow, error) {
+	return s.queries.GetSpendingByMonth(ctx, userID)
+}
+
+// SpendingByCategoryForMonth totals the user's reward-eligible spend per
+// category within a single calendar month.
+func (s *PlaidService) SpendingByCategoryForMonth(ctx context.Context, userID uuid.UUID, month time.Time) ([]db.GetSpendingByCategoryForMonthRow, error) {
+	return s.queries.GetSpendingByCategoryForMonth(ctx, db.GetSpendingByCategoryForMonthParams{UserID: userID, Month: month})
+}
+
+// AllCategories returns every reward-eligible category the user has ever
+// spent in, ordered by all-time total.
+func (s *PlaidService) AllCategories(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	return s.queries.GetAllCategoriesForUser(ctx, userID)
 }

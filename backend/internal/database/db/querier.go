@@ -16,10 +16,27 @@ type Querier interface {
 	DeleteTransactionByPlaidID(ctx context.Context, plaidTransactionID string) error
 	GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountByPlaidAccountID(ctx context.Context, plaidAccountID string) (Account, error)
+	// Every reward-eligible category the user has ever spent in, ordered by
+	// all-time total so the chart's category order stays fixed across months
+	// (months with no spend in a category still render it, at zero).
+	GetAllCategoriesForUser(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, error)
 	// There is no authentication yet (Phase 8), so the application runs as a
 	// single implicit user. This finds it.
 	GetFirstUser(ctx context.Context) (User, error)
+	// Plaid reports categories as a free-text string per transaction; this maps
+	// that string onto the shared categories vocabulary, creating the row the
+	// first time a given name is seen. The no-op DO UPDATE makes RETURNING fire
+	// on a conflict too, which plain DO NOTHING would not.
+	GetOrCreateCategoryByName(ctx context.Context, name string) (Category, error)
+	// Same reward-eligible filter as GetSpendingByMonth, scoped to a single
+	// calendar month for the bar chart's month drill-down.
+	GetSpendingByCategoryForMonth(ctx context.Context, arg GetSpendingByCategoryForMonthParams) ([]GetSpendingByCategoryForMonthRow, error)
+	// Totals spend per calendar month for the reward engine's purposes:
+	// TRANSFER_IN, TRANSFER_OUT and LOAN_PAYMENTS are money movement, not card
+	// purchases, and never earn rewards, so they're excluded here rather than in
+	// every caller.
+	GetSpendingByMonth(ctx context.Context, userID uuid.UUID) ([]GetSpendingByMonthRow, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	// Bonus-earning rules for a single card, highest rate first so the reward
 	// engine can evaluate the most valuable rule first.
@@ -30,7 +47,9 @@ type Querier interface {
 	ListTransactionsByAccount(ctx context.Context, arg ListTransactionsByAccountParams) ([]Transaction, error)
 	// Transactions are owned transitively: transaction -> account -> plaid_item -> user.
 	// Every read is scoped by user so no query can leak another user's spend.
-	ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]Transaction, error)
+	// category_name is joined in so callers can display it without a second
+	// lookup against the categories table.
+	ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]ListTransactionsByUserRow, error)
 	// Called after each page of /transactions/sync so a later page's failure
 	// does not re-fetch transactions the previous page already persisted.
 	UpdatePlaidItemCursor(ctx context.Context, arg UpdatePlaidItemCursorParams) error

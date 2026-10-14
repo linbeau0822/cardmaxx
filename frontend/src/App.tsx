@@ -3,6 +3,7 @@ import { usePlaidLink, type PlaidLinkOnExit, type PlaidLinkOnSuccess } from 'rea
 
 import { ApiStatus } from './components/ApiStatus'
 import { ComingSoon, Panel } from './components/Panel'
+import { SpendingOverview } from './components/SpendingOverview'
 import { TransactionsSidebar } from './components/TransactionsSidebar'
 import { ApiError, api } from './lib/api'
 
@@ -72,37 +73,37 @@ export default function App() {
   }
 
   return (
-    <main className="mx-auto flex max-w-6xl gap-6 px-6 py-12">
-      <div className="min-w-0 flex-1">
-        <header className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">CardMaxx</h1>
-            <p className="mt-1 text-sm text-ink-muted">
-              Analyze your spending and find the credit cards that pay you more.
-            </p>
-          </div>
-          <ApiStatus />
-        </header>
-
-        <div className="mt-8">
-          <button
-            type="button"
-            onClick={connectAccount}
-            disabled={pending}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
-          >
-            {pending ? 'Connecting…' : 'Connect Account'}
-          </button>
-          {message && (
-            <p role="status" className="mt-3 text-sm text-ink-muted">
-              {message}
-            </p>
-          )}
+    <main className="mx-auto max-w-6xl px-6 py-12">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">CardMaxx</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Analyze your spending and find the credit cards that pay you more.
+          </p>
         </div>
+        <ApiStatus />
+      </header>
 
-        <div className="mt-10 grid gap-4">
+      <div className="mt-8">
+        <button
+          type="button"
+          onClick={connectAccount}
+          disabled={pending}
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
+        >
+          {pending ? 'Connecting…' : 'Connect Account'}
+        </button>
+        {message && (
+          <p role="status" className="mt-3 text-sm text-ink-muted">
+            {message}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-10 flex gap-6">
+        <div className="min-w-0 flex-1 grid gap-4">
           <Panel title="Spending Overview" subtitle="Where your money goes, by category and month.">
-            <ComingSoon phase="phase 3" />
+            <SpendingOverview refreshKey={transactionsVersion} />
           </Panel>
           <Panel title="Your Cards" subtitle="The cards in your wallet and what each one earns you.">
             <ComingSoon phase="phase 4" />
@@ -114,9 +115,9 @@ export default function App() {
             <ComingSoon phase="phase 5" />
           </Panel>
         </div>
-      </div>
 
-      <TransactionsSidebar refreshKey={transactionsVersion} />
+        <TransactionsSidebar refreshKey={transactionsVersion} />
+      </div>
     </main>
   )
 }
