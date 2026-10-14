@@ -24,7 +24,8 @@ INSERT INTO transactions (
     @pending_transaction_id
 )
 ON CONFLICT (plaid_transaction_id) DO UPDATE SET
-    amount_cents           = EXCLUDED.amount_cents,
+    category_id             = EXCLUDED.category_id,
+    amount_cents            = EXCLUDED.amount_cents,
     date                    = EXCLUDED.date,
     name                    = EXCLUDED.name,
     merchant_name           = EXCLUDED.merchant_name,
@@ -38,10 +39,13 @@ DELETE FROM transactions WHERE plaid_transaction_id = @plaid_transaction_id;
 -- name: ListTransactionsByUser :many
 -- Transactions are owned transitively: transaction -> account -> plaid_item -> user.
 -- Every read is scoped by user so no query can leak another user's spend.
-SELECT t.*
+-- category_name is joined in so callers can display it without a second
+-- lookup against the categories table.
+SELECT t.*, c.name AS category_name
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 JOIN plaid_items i ON i.id = a.plaid_item_id
+LEFT JOIN categories c ON c.id = t.category_id
 WHERE i.user_id = @user_id
 ORDER BY t.date DESC, t.id
 LIMIT @result_limit OFFSET @result_offset;

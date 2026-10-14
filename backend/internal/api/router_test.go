@@ -52,8 +52,24 @@ func (f *fakeQuerier) UpsertTransaction(_ context.Context, arg db.UpsertTransact
 func (f *fakeQuerier) DeleteTransactionByPlaidID(_ context.Context, _ string) error {
 	return nil
 }
-func (f *fakeQuerier) ListTransactionsByUser(_ context.Context, _ db.ListTransactionsByUserParams) ([]db.Transaction, error) {
-	return f.transactions, nil
+func (f *fakeQuerier) ListTransactionsByUser(_ context.Context, _ db.ListTransactionsByUserParams) ([]db.ListTransactionsByUserRow, error) {
+	rows := make([]db.ListTransactionsByUserRow, len(f.transactions))
+	for i, t := range f.transactions {
+		rows[i] = db.ListTransactionsByUserRow{ID: t.ID, PlaidTransactionID: t.PlaidTransactionID}
+	}
+	return rows, nil
+}
+func (f *fakeQuerier) GetOrCreateCategoryByName(_ context.Context, name string) (db.Category, error) {
+	return db.Category{ID: uuid.New(), Name: name}, nil
+}
+func (f *fakeQuerier) GetSpendingByMonth(_ context.Context, _ uuid.UUID) ([]db.GetSpendingByMonthRow, error) {
+	return nil, nil
+}
+func (f *fakeQuerier) GetSpendingByCategoryForMonth(_ context.Context, _ db.GetSpendingByCategoryForMonthParams) ([]db.GetSpendingByCategoryForMonthRow, error) {
+	return nil, nil
+}
+func (f *fakeQuerier) GetAllCategoriesForUser(_ context.Context, _ uuid.UUID) ([]string, error) {
+	return nil, nil
 }
 
 // fakePlaidClient is an in-memory stand-in for service.PlaidClient, so these
@@ -135,7 +151,6 @@ func TestUnimplementedEndpointsReturn501(t *testing.T) {
 		method, path string
 	}{
 		{http.MethodGet, "/api/v1/cards"},
-		{http.MethodGet, "/api/v1/analysis/spending"},
 		{http.MethodGet, "/api/v1/recommendations"},
 	}
 
@@ -245,6 +260,14 @@ func TestListAccounts(t *testing.T) {
 
 func TestListTransactions(t *testing.T) {
 	rec := do(t, http.MethodGet, "/api/v1/transactions", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestSpendingByCategory(t *testing.T) {
+	rec := do(t, http.MethodGet, "/api/v1/analysis/spending", nil)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())

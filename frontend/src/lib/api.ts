@@ -92,11 +92,31 @@ export interface Transaction {
   name: string
   merchant_name: string | null
   category_id: string | null
+  category_name: string | null
   pending: boolean
 }
 
 export interface TransactionsResponse {
   transactions: Transaction[]
+}
+
+export interface CategorySpending {
+  category_name: string
+  total_cents: number
+  transaction_count: number
+}
+
+export interface MonthSpending {
+  month: string
+  total_cents: number
+  transaction_count: number
+}
+
+export interface SpendingAnalysisResponse {
+  categories: CategorySpending[]
+  all_categories: string[]
+  months: MonthSpending[]
+  selected_month: string
 }
 
 export const api = {
@@ -120,4 +140,11 @@ export const api = {
   /** Lists the current user's transactions, most recent first. */
   listTransactions: (limit = 100) =>
     request<TransactionsResponse>(`/api/v1/transactions?limit=${limit}`),
+
+  /**
+   * Totals the current user's reward-eligible spend by month, plus the
+   * category breakdown for one month (defaults to the most recent).
+   */
+  spendingByCategory: (month?: string) =>
+    request<SpendingAnalysisResponse>(`/api/v1/analysis/spending${month ? `?month=${month}` : ''}`),
 }
