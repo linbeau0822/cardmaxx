@@ -112,11 +112,18 @@ export interface MonthSpending {
   transaction_count: number
 }
 
+export interface MerchantSpending {
+  merchant_name: string
+  total_cents: number
+  transaction_count: number
+}
+
 export interface SpendingAnalysisResponse {
   categories: CategorySpending[]
   all_categories: string[]
   months: MonthSpending[]
   selected_month: string
+  top_merchants: MerchantSpending[]
 }
 
 export const api = {

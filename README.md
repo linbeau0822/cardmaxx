@@ -56,7 +56,7 @@ That's the natural next slice: add `react-plaid-link`, call it from the
 | --- | --- |
 | Plaid account connection (Link) | Backend done — phase 2; frontend widget pending |
 | Transaction synchronization | Done — phase 2 |
-| Spending analysis (category, monthly, merchant) | Planned — phase 3 |
+| Spending analysis (category, monthly, merchant) | Done — phase 3 |
 | Credit-card catalog and reward rules | Planned — phase 4 |
 | Reward calculation and annual value | Planned — phase 4 |
 | Current-wallet analysis | Planned — phase 5 |
@@ -338,6 +338,25 @@ Lists every account linked to the current user.
 Lists the current user's transactions, most recent first.
 Query params: `limit` (default 50, max 200), `offset` (default 0).
 
+#### `GET /api/v1/analysis/spending`
+
+Reward-eligible spend by calendar month, by category within one selected
+month, and the top 10 merchants by all-time total.
+Query params: `month` (e.g. `2026-03-01`; defaults to the most recent month
+with activity).
+
+```http
+GET /api/v1/analysis/spending  →  200 OK
+
+{
+  "months": [{ "month": "2026-09-01", "total_cents": 300938, "transaction_count": 28 }],
+  "selected_month": "2026-09-01",
+  "categories": [{ "category_name": "FOOD_AND_DRINK", "total_cents": 4899, "transaction_count": 6 }],
+  "all_categories": ["FOOD_AND_DRINK", "TRANSPORTATION"],
+  "top_merchants": [{ "merchant_name": "Starbucks", "total_cents": 3897, "transaction_count": 9 }]
+}
+```
+
 ### Planned
 
 Every route below is registered and currently returns `501 Not Implemented`.
@@ -345,7 +364,6 @@ Every route below is registered and currently returns `501 Not Implemented`.
 | Endpoint | Purpose | Phase |
 | --- | --- | --- |
 | `GET /api/v1/cards` | Credit-card catalog | 4 |
-| `GET /api/v1/analysis/spending` | Category and monthly spending | 3 |
 | `GET /api/v1/recommendations` | Card recommendations | 5 |
 
 ### Errors
@@ -356,7 +374,7 @@ Every error uses one envelope, with a stable machine-readable `code`:
 {
   "error": {
     "code": "not_implemented",
-    "message": "this endpoint is not implemented yet; planned for phase 3 (spending analysis)"
+    "message": "this endpoint is not implemented yet; planned for phase 4 (credit-card catalog)"
   }
 }
 ```
@@ -402,10 +420,10 @@ Two conventions matter:
 
 ### Phase 3 — Spending Analysis
 
-- [ ] Category aggregation
-- [ ] Monthly spending
-- [ ] Merchant analysis
-- [ ] Spending dashboard
+- [x] Category aggregation
+- [x] Monthly spending
+- [x] Merchant analysis
+- [x] Spending dashboard
 
 ### Phase 4 — Reward Engine
 

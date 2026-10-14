@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError, api, type CategorySpending, type MonthSpending } from '../lib/api'
+import { ApiError, api, type CategorySpending, type MerchantSpending, type MonthSpending } from '../lib/api'
+import { Panel } from './Panel'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 // `month` values from the API are date-only UTC strings (e.g. "2026-08-01"). Formatting them
@@ -137,12 +138,38 @@ function MonthPicker({
   )
 }
 
+/** Ranked list of all-time spend per merchant, as horizontal bars against the top merchant's total. */
+function TopMerchants({ merchants }: { merchants: MerchantSpending[] }) {
+  if (merchants.length === 0) return <p className="text-sm text-ink-muted">No categorized spending yet.</p>
+
+  const maxCents = Math.max(1, ...merchants.map((m) => m.total_cents))
+
+  return (
+    <ul className="space-y-2">
+      {merchants.map((m) => (
+        <li key={m.merchant_name} className="flex items-center gap-3 text-sm">
+          <span className="w-32 flex-none truncate text-ink" title={m.merchant_name}>
+            {m.merchant_name}
+          </span>
+          <div className="h-2 flex-1 rounded bg-white/10">
+            <div className="h-2 rounded bg-accent" style={{ width: `${Math.max(0, (m.total_cents / maxCents) * 100)}%` }} />
+          </div>
+          <span className="w-24 flex-none text-right tabular-nums text-ink-muted">
+            {currency.format(m.total_cents / 100)} · {m.transaction_count}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** Category breakdown, as a bar chart, for a month the user can step through. */
 export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
   const [categories, setCategories] = useState<CategorySpending[]>([])
   const [allCategories, setAllCategories] = useState<string[]>([])
   const [months, setMonths] = useState<MonthSpending[]>([])
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
+  const [topMerchants, setTopMerchants] = useState<MerchantSpending[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -158,6 +185,7 @@ export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
           setAllCategories(res.all_categories)
           setMonths(res.months)
           setSelectedMonth(res.selected_month)
+          setTopMerchants(res.top_merchants)
         }
       })
       .catch((err: unknown) => {
@@ -179,11 +207,13 @@ export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Failed to load spending.'))
   }
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading…</p>
-  if (error) return <p className="text-sm text-ink-muted">{error}</p>
-  if (months.length === 0 || selectedMonth === null) return <p className="text-sm text-ink-muted">No categorized spending yet.</p>
-
-  return (
+  const body = loading ? (
+    <p className="text-sm text-ink-muted">Loading…</p>
+  ) : error ? (
+    <p className="text-sm text-ink-muted">{error}</p>
+  ) : months.length === 0 || selectedMonth === null ? (
+    <p className="text-sm text-ink-muted">No categorized spending yet.</p>
+  ) : (
     <div className="grid gap-5">
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -203,5 +233,18 @@ export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
         ))}
       </ul>
     </div>
+  )
+
+  return (
+    <>
+      <Panel title="Spending Overview" subtitle="Where your money goes, by category and month.">
+        {body}
+      </Panel>
+      {!loading && !error && topMerchants.length > 0 && (
+        <Panel title="Top Merchants" subtitle="Your highest all-time spend by merchant.">
+          <TopMerchants merchants={topMerchants} />
+        </Panel>
+      )}
+    </>
   )
 }

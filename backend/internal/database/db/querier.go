@@ -37,6 +37,10 @@ type Querier interface {
 	// purchases, and never earn rewards, so they're excluded here rather than in
 	// every caller.
 	GetSpendingByMonth(ctx context.Context, userID uuid.UUID) ([]GetSpendingByMonthRow, error)
+	// All-time reward-eligible spend per merchant, ranked for the dashboard's
+	// top-N list. merchant_name is null when Plaid couldn't resolve one, so
+	// those fall back to the transaction's own name rather than being dropped.
+	GetTopMerchants(ctx context.Context, arg GetTopMerchantsParams) ([]GetTopMerchantsRow, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	// Bonus-earning rules for a single card, highest rate first so the reward
 	// engine can evaluate the most valuable rule first.
