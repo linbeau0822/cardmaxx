@@ -34,6 +34,7 @@ type Querier interface {
 	GetSpendingByMonth(ctx context.Context, userID uuid.UUID) ([]db.GetSpendingByMonthRow, error)
 	GetSpendingByCategoryForMonth(ctx context.Context, arg db.GetSpendingByCategoryForMonthParams) ([]db.GetSpendingByCategoryForMonthRow, error)
 	GetAllCategoriesForUser(ctx context.Context, userID uuid.UUID) ([]string, error)
+	GetTopMerchants(ctx context.Context, arg db.GetTopMerchantsParams) ([]db.GetTopMerchantsRow, error)
 }
 
 // PlaidClient is the slice of plaid.Client that PlaidService needs.
@@ -235,4 +236,9 @@ func (s *PlaidService) SpendingByCategoryForMonth(ctx context.Context, userID uu
 // spent in, ordered by all-time total.
 func (s *PlaidService) AllCategories(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	return s.queries.GetAllCategoriesForUser(ctx, userID)
+}
+
+// TopMerchants ranks the user's all-time reward-eligible spend by merchant.
+func (s *PlaidService) TopMerchants(ctx context.Context, userID uuid.UUID, limit int32) ([]db.GetTopMerchantsRow, error) {
+	return s.queries.GetTopMerchants(ctx, db.GetTopMerchantsParams{UserID: userID, ResultLimit: limit})
 }

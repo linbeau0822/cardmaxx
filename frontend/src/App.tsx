@@ -100,11 +100,9 @@ export default function App() {
         )}
       </div>
 
-      <div className="mt-10 flex gap-6">
+      <div className="mt-10 flex items-start gap-6">
         <div className="min-w-0 flex-1 grid gap-4">
-          <Panel title="Spending Overview" subtitle="Where your money goes, by category and month.">
-            <SpendingOverview refreshKey={transactionsVersion} />
-          </Panel>
+          <SpendingOverview refreshKey={transactionsVersion} />
           <Panel title="Your Cards" subtitle="The cards in your wallet and what each one earns you.">
             <ComingSoon phase="phase 4" />
           </Panel>

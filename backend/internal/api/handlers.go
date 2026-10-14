@@ -184,6 +184,13 @@ func (s *Server) handleSpendingAnalysis(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	merchants, err := s.plaid.TopMerchants(r.Context(), s.currentUserID, topMerchantsLimit)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "top merchants failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to compute top merchants")
+		return
+	}
+
 	monthsResp := make([]monthSpending, len(months))
 	for i, m := range months {
 		monthsResp[i] = monthSpending{Month: m.Month.Format("2006-01-02"), TotalCents: m.TotalCents, TransactionCount: m.TransactionCount}
@@ -194,8 +201,13 @@ func (s *Server) handleSpendingAnalysis(w http.ResponseWriter, r *http.Request) 
 		"all_categories": allCategories,
 		"months":         monthsResp,
 		"selected_month": month.Format("2006-01-02"),
+		"top_merchants":  merchants,
 	})
 }
+
+// topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard
+// shows a leaderboard, not a full export, so there's no pagination to size for.
+const topMerchantsLimit = 10
 
 // parseBoundedInt parses raw as an int, applying fallback when raw is empty
 // and rejecting anything outside [min, max].

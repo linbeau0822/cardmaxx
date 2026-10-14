@@ -71,6 +71,9 @@ func (f *fakeQuerier) GetSpendingByCategoryForMonth(_ context.Context, _ db.GetS
 func (f *fakeQuerier) GetAllCategoriesForUser(_ context.Context, _ uuid.UUID) ([]string, error) {
 	return nil, nil
 }
+func (f *fakeQuerier) GetTopMerchants(_ context.Context, _ db.GetTopMerchantsParams) ([]db.GetTopMerchantsRow, error) {
+	return nil, nil
+}
 
 // fakePlaidClient is an in-memory stand-in for service.PlaidClient, so these
 // tests make no network calls to Plaid.

@@ -134,3 +134,50 @@ func (q *Queries) GetSpendingByMonth(ctx context.Context, userID uuid.UUID) ([]G
 	}
 	return items, nil
 }
+
+const getTopMerchants = `-- name: GetTopMerchants :many
+SELECT COALESCE(t.merchant_name, t.name) AS merchant_name, SUM(t.amount_cents)::BIGINT AS total_cents, COUNT(*) AS transaction_count
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN plaid_items i ON i.id = a.plaid_item_id
+JOIN categories c ON c.id = t.category_id
+WHERE i.user_id = $1
+  AND c.name NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')
+GROUP BY COALESCE(t.merchant_name, t.name)
+ORDER BY total_cents DESC
+LIMIT $2
+`
+
+type GetTopMerchantsParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	ResultLimit int32     `json:"result_limit"`
+}
+
+type GetTopMerchantsRow struct {
+	MerchantName     string `json:"merchant_name"`
+	TotalCents       int64  `json:"total_cents"`
+	TransactionCount int64  `json:"transaction_count"`
+}
+
+// All-time reward-eligible spend per merchant, ranked for the dashboard's
+// top-N list. merchant_name is null when Plaid couldn't resolve one, so
+// those fall back to the transaction's own name rather than being dropped.
+func (q *Queries) GetTopMerchants(ctx context.Context, arg GetTopMerchantsParams) ([]GetTopMerchantsRow, error) {
+	rows, err := q.db.Query(ctx, getTopMerchants, arg.UserID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTopMerchantsRow{}
+	for rows.Next() {
+		var i GetTopMerchantsRow
+		if err := rows.Scan(&i.MerchantName, &i.TotalCents, &i.TransactionCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
