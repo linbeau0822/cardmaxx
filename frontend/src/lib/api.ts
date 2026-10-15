@@ -100,6 +100,18 @@ export interface TransactionsResponse {
   transactions: Transaction[]
 }
 
+export interface Account {
+  id: string
+  name: string
+  mask: string | null
+  /** The catalogue card this account is matched to, if any (matching isn't automatic yet). */
+  credit_card_id: string | null
+}
+
+export interface AccountsResponse {
+  accounts: Account[]
+}
+
 export interface CategorySpending {
   category_name: string
   total_cents: number
@@ -126,6 +138,25 @@ export interface SpendingAnalysisResponse {
   top_merchants: MerchantSpending[]
 }
 
+export interface CardRewardCategory {
+  category_name: string
+  reward_rate_bps: number
+  reward_cap_cents: number | null
+}
+
+export interface Card {
+  id: string
+  name: string
+  issuer: string
+  annual_fee_cents: number
+  base_reward_rate_bps: number
+  reward_categories: CardRewardCategory[]
+}
+
+export interface CardsResponse {
+  cards: Card[]
+}
+
 export const api = {
   /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
@@ -144,6 +175,9 @@ export const api = {
   /** Pulls new transaction activity for every Item the current user has linked. */
   sync: () => request<SyncResponse>('/api/v1/plaid/sync', { method: 'POST' }),
 
+  /** Lists every account linked to the current user. */
+  listAccounts: () => request<AccountsResponse>('/api/v1/accounts'),
+
   /** Lists the current user's transactions, most recent first. */
   listTransactions: (limit = 100) =>
     request<TransactionsResponse>(`/api/v1/transactions?limit=${limit}`),
@@ -154,4 +188,7 @@ export const api = {
    */
   spendingByCategory: (month?: string) =>
     request<SpendingAnalysisResponse>(`/api/v1/analysis/spending${month ? `?month=${month}` : ''}`),
+
+  /** Lists the credit-card catalogue, each with its bonus reward categories. */
+  listCards: () => request<CardsResponse>('/api/v1/cards'),
 }

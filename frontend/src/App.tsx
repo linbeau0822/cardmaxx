@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePlaidLink, type PlaidLinkOnExit, type PlaidLinkOnSuccess } from 'react-plaid-link'
 
 import { ApiStatus } from './components/ApiStatus'
+import { CardsPanel } from './components/CardsPanel'
 import { ComingSoon, Panel } from './components/Panel'
 import { SpendingOverview } from './components/SpendingOverview'
 import { TransactionsSidebar } from './components/TransactionsSidebar'
-import { ApiError, api } from './lib/api'
+import { ApiError, type Account, api } from './lib/api'
 
 function describeError(error: unknown, action: string): string {
   return error instanceof ApiError
@@ -22,6 +23,23 @@ export default function App() {
   const [linkToken, setLinkToken] = useState<string | null>(null)
   // Bumped after every successful sync so the transactions sidebar refetches.
   const [transactionsVersion, setTransactionsVersion] = useState(0)
+  // null while loading, so the dashboard doesn't flash "no accounts" first.
+  const [accounts, setAccounts] = useState<Account[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listAccounts()
+      .then(({ accounts }) => {
+        if (!cancelled) setAccounts(accounts)
+      })
+      .catch(() => {
+        if (!cancelled) setAccounts([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [transactionsVersion])
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>((publicToken) => {
     if (!publicToken) return
@@ -100,22 +118,30 @@ export default function App() {
         )}
       </div>
 
-      <div className="mt-10 flex items-start gap-6">
-        <div className="min-w-0 flex-1 grid gap-4">
-          <SpendingOverview refreshKey={transactionsVersion} />
-          <Panel title="Your Cards" subtitle="The cards in your wallet and what each one earns you.">
-            <ComingSoon phase="phase 4" />
-          </Panel>
-          <Panel
-            title="Recommendations"
-            subtitle="Cards that would have earned you more on the spending you already do."
-          >
-            <ComingSoon phase="phase 5" />
+      {accounts !== null && accounts.length === 0 ? (
+        <div className="mt-10">
+          <Panel title="No accounts linked" subtitle="Connect an account above to see your spending and card recommendations.">
+            <p className="text-sm text-ink-muted">Nothing to show yet.</p>
           </Panel>
         </div>
+      ) : (
+        accounts !== null && (
+          <div className="mt-10 flex items-start gap-6">
+            <div className="min-w-0 flex-1 grid gap-4">
+              <SpendingOverview refreshKey={transactionsVersion} />
+              <CardsPanel accounts={accounts} />
+              <Panel
+                title="Recommendations"
+                subtitle="Cards that would have earned you more on the spending you already do."
+              >
+                <ComingSoon phase="phase 5" />
+              </Panel>
+            </div>
 
-        <TransactionsSidebar refreshKey={transactionsVersion} />
-      </div>
+            <TransactionsSidebar refreshKey={transactionsVersion} />
+          </div>
+        )
+      )}
     </main>
   )
 }
