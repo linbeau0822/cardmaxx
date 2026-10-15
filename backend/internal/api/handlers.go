@@ -205,6 +205,18 @@ func (s *Server) handleSpendingAnalysis(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// handleListCards lists the credit-card catalogue, each with its bonus
+// reward categories. This is global reference data, not scoped to any user.
+func (s *Server) handleListCards(w http.ResponseWriter, r *http.Request) {
+	cards, err := s.plaid.ListCards(r.Context())
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "list cards failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to list cards")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cards": cards})
+}
+
 // topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard
 // shows a leaderboard, not a full export, so there's no pagination to size for.
 const topMerchantsLimit = 10

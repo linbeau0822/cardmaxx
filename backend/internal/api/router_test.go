@@ -26,6 +26,7 @@ type fakeQuerier struct {
 	accounts     []db.Account
 	transactions []db.Transaction
 	plaidItems   []db.PlaidItem
+	cards        []db.CreditCard
 }
 
 func (f *fakeQuerier) CreatePlaidItem(_ context.Context, arg db.CreatePlaidItemParams) (db.PlaidItem, error) {
@@ -72,6 +73,12 @@ func (f *fakeQuerier) GetAllCategoriesForUser(_ context.Context, _ uuid.UUID) ([
 	return nil, nil
 }
 func (f *fakeQuerier) GetTopMerchants(_ context.Context, _ db.GetTopMerchantsParams) ([]db.GetTopMerchantsRow, error) {
+	return nil, nil
+}
+func (f *fakeQuerier) ListCreditCards(_ context.Context) ([]db.CreditCard, error) {
+	return f.cards, nil
+}
+func (f *fakeQuerier) ListCardRewardCategories(_ context.Context, _ uuid.UUID) ([]db.ListCardRewardCategoriesRow, error) {
 	return nil, nil
 }
 
@@ -153,7 +160,6 @@ func TestUnimplementedEndpointsReturn501(t *testing.T) {
 	routes := []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/api/v1/cards"},
 		{http.MethodGet, "/api/v1/recommendations"},
 	}
 
@@ -266,6 +272,26 @@ func TestListTransactions(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestListCards(t *testing.T) {
+	q := &fakeQuerier{cards: []db.CreditCard{{ID: uuid.New(), Name: "Sapphire Preferred", Issuer: "Chase"}}}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+	rec := doOn(t, handler, http.MethodGet, "/api/v1/cards", nil, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body map[string][]map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+	if len(body["cards"]) != 1 {
+		t.Fatalf("cards = %v, want 1 entry", body["cards"])
+	}
+	if body["cards"][0]["name"] != "Sapphire Preferred" {
+		t.Errorf("cards[0].name = %v, want Sapphire Preferred", body["cards"][0]["name"])
 	}
 }
 

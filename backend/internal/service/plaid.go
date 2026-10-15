@@ -35,6 +35,8 @@ type Querier interface {
 	GetSpendingByCategoryForMonth(ctx context.Context, arg db.GetSpendingByCategoryForMonthParams) ([]db.GetSpendingByCategoryForMonthRow, error)
 	GetAllCategoriesForUser(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetTopMerchants(ctx context.Context, arg db.GetTopMerchantsParams) ([]db.GetTopMerchantsRow, error)
+	ListCreditCards(ctx context.Context) ([]db.CreditCard, error)
+	ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]db.ListCardRewardCategoriesRow, error)
 }
 
 // PlaidClient is the slice of plaid.Client that PlaidService needs.
@@ -241,4 +243,29 @@ func (s *PlaidService) AllCategories(ctx context.Context, userID uuid.UUID) ([]s
 // TopMerchants ranks the user's all-time reward-eligible spend by merchant.
 func (s *PlaidService) TopMerchants(ctx context.Context, userID uuid.UUID, limit int32) ([]db.GetTopMerchantsRow, error) {
 	return s.queries.GetTopMerchants(ctx, db.GetTopMerchantsParams{UserID: userID, ResultLimit: limit})
+}
+
+// CardWithRewardCategories is a catalogue card plus its bonus-earning rules.
+type CardWithRewardCategories struct {
+	db.CreditCard
+	RewardCategories []db.ListCardRewardCategoriesRow `json:"reward_categories"`
+}
+
+// ListCards returns the credit-card catalogue, each with its bonus-category
+// rules. The catalogue is global reference data, not scoped to any user.
+func (s *PlaidService) ListCards(ctx context.Context) ([]CardWithRewardCategories, error) {
+	cards, err := s.queries.ListCreditCards(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list credit cards: %w", err)
+	}
+
+	result := make([]CardWithRewardCategories, len(cards))
+	for i, card := range cards {
+		rewardCategories, err := s.queries.ListCardRewardCategories(ctx, card.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list reward categories for card %s: %w", card.ID, err)
+		}
+		result[i] = CardWithRewardCategories{CreditCard: card, RewardCategories: rewardCategories}
+	}
+	return result, nil
 }
