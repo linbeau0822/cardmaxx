@@ -43,7 +43,8 @@ What works today:
 Every endpoint not yet reached by its phase returns an explicit
 `501 Not Implemented`, so a caller can always tell "not built yet" apart from
 "built and returned nothing". There is still no authentication (by design,
-until Phase 8) and no reward engine or AI yet.
+until Phase 8) and no AI yet. The reward/annual-value math (`internal/reward`)
+is implemented but not yet wired to any account - that's Phase 4c.
 
 The frontend does not yet open Plaid Link in the browser — `createLinkToken`
 is wired up, but nothing calls `/exchange-token` with a real public token yet.
@@ -58,7 +59,7 @@ That's the natural next slice: add `react-plaid-link`, call it from the
 | Transaction synchronization | Done — phase 2 |
 | Spending analysis (category, monthly, merchant) | Done — phase 3 |
 | Credit-card catalog and reward rules | Done — phase 4a |
-| Reward calculation and annual value | Planned — phase 4 |
+| Reward calculation and annual value | Done — phase 4b |
 | Current-wallet analysis | Planned — phase 5 |
 | Card recommendations | Planned — phase 5 |
 | Portfolio optimization | Planned — phase 6 |
@@ -171,6 +172,7 @@ cardmaxx/
 │   │   ├── database/          pgx connection pool
 │   │   │   └── db/            Generated sqlc code (do not edit)
 │   │   ├── plaid/             Plaid boundary: client and domain types
+│   │   ├── reward/            Reward/annual-value math: pure functions, no DB or HTTP
 │   │   └── service/           Business logic: PlaidService links Items, syncs transactions
 │   ├── migrations/            golang-migrate SQL migrations
 │   ├── sql/queries/           Hand-written SQL compiled by sqlc
@@ -458,8 +460,8 @@ Two conventions matter:
 
 #### Phase 4b — Reward Engine
 
-- [ ] Reward calculation (`internal/reward`)
-- [ ] Annual value calculation (incl. annual-fee accounting)
+- [x] Reward calculation (`internal/reward`)
+- [x] Annual value calculation (incl. annual-fee accounting)
 
 #### Phase 4c — Linking & Exposure
 
