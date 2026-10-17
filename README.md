@@ -57,7 +57,7 @@ That's the natural next slice: add `react-plaid-link`, call it from the
 | Plaid account connection (Link) | Backend done — phase 2; frontend widget pending |
 | Transaction synchronization | Done — phase 2 |
 | Spending analysis (category, monthly, merchant) | Done — phase 3 |
-| Credit-card catalog and reward rules | Planned — phase 4 |
+| Credit-card catalog and reward rules | Done — phase 4a |
 | Reward calculation and annual value | Planned — phase 4 |
 | Current-wallet analysis | Planned — phase 5 |
 | Card recommendations | Planned — phase 5 |
@@ -357,13 +357,37 @@ GET /api/v1/analysis/spending  →  200 OK
 }
 ```
 
+#### `GET /api/v1/cards`
+
+Lists the credit-card catalogue, each with its bonus reward categories.
+Global reference data — not scoped to any user.
+
+```http
+GET /api/v1/cards  →  200 OK
+
+{
+  "cards": [
+    {
+      "id": "778c8627-c773-4474-93e5-4422e94e8bce",
+      "name": "Sapphire Preferred",
+      "issuer": "Chase",
+      "annual_fee_cents": 9500,
+      "base_reward_rate_bps": 100,
+      "reward_categories": [
+        { "category_name": "FOOD_AND_DRINK", "reward_rate_bps": 300, "reward_cap_cents": null },
+        { "category_name": "TRAVEL", "reward_rate_bps": 200, "reward_cap_cents": null }
+      ]
+    }
+  ]
+}
+```
+
 ### Planned
 
 Every route below is registered and currently returns `501 Not Implemented`.
 
 | Endpoint | Purpose | Phase |
 | --- | --- | --- |
-| `GET /api/v1/cards` | Credit-card catalog | 4 |
 | `GET /api/v1/recommendations` | Card recommendations | 5 |
 
 ### Errors
@@ -427,11 +451,20 @@ Two conventions matter:
 
 ### Phase 4 — Reward Engine
 
-- [ ] Credit-card catalog
-- [ ] Reward rules
-- [ ] Reward calculation
-- [ ] Annual value calculation
-- [ ] Annual-fee accounting
+#### Phase 4a — Catalog & API
+
+- [x] Seed migration: credit cards + reward categories
+- [x] `GET /api/v1/cards`
+
+#### Phase 4b — Reward Engine
+
+- [ ] Reward calculation (`internal/reward`)
+- [ ] Annual value calculation (incl. annual-fee accounting)
+
+#### Phase 4c — Linking & Exposure
+
+- [ ] Link accounts to catalog cards
+- [ ] `GET /api/v1/cards/{id}/value`
 
 ### Phase 5 — Recommendations
 

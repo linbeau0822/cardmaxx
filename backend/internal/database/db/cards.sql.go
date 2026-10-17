@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	uuid "github.com/google/uuid"
 )
@@ -31,23 +32,36 @@ func (q *Queries) GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, 
 }
 
 const listCardRewardCategories = `-- name: ListCardRewardCategories :many
-SELECT id, credit_card_id, category_id, reward_rate_bps, reward_cap_cents, created_at, updated_at
-FROM card_reward_categories
-WHERE credit_card_id = $1
-ORDER BY reward_rate_bps DESC, category_id
+SELECT crc.id, crc.credit_card_id, crc.category_id, crc.reward_rate_bps, crc.reward_cap_cents, crc.created_at, crc.updated_at, cat.name AS category_name
+FROM card_reward_categories crc
+JOIN categories cat ON cat.id = crc.category_id
+WHERE crc.credit_card_id = $1
+ORDER BY crc.reward_rate_bps DESC, cat.name
 `
 
+type ListCardRewardCategoriesRow struct {
+	ID             uuid.UUID `json:"id"`
+	CreditCardID   uuid.UUID `json:"credit_card_id"`
+	CategoryID     uuid.UUID `json:"category_id"`
+	RewardRateBps  int32     `json:"reward_rate_bps"`
+	RewardCapCents *int64    `json:"reward_cap_cents"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	CategoryName   string    `json:"category_name"`
+}
+
 // Bonus-earning rules for a single card, highest rate first so the reward
-// engine can evaluate the most valuable rule first.
-func (q *Queries) ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]CardRewardCategory, error) {
+// engine can evaluate the most valuable rule first. Joined with categories
+// so callers get the category name, not just its id.
+func (q *Queries) ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]ListCardRewardCategoriesRow, error) {
 	rows, err := q.db.Query(ctx, listCardRewardCategories, creditCardID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []CardRewardCategory{}
+	items := []ListCardRewardCategoriesRow{}
 	for rows.Next() {
-		var i CardRewardCategory
+		var i ListCardRewardCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.CreditCardID,
@@ -56,6 +70,7 @@ func (q *Queries) ListCardRewardCategories(ctx context.Context, creditCardID uui
 			&i.RewardCapCents,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}

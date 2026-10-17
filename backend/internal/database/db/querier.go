@@ -43,8 +43,9 @@ type Querier interface {
 	GetTopMerchants(ctx context.Context, arg GetTopMerchantsParams) ([]GetTopMerchantsRow, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	// Bonus-earning rules for a single card, highest rate first so the reward
-	// engine can evaluate the most valuable rule first.
-	ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]CardRewardCategory, error)
+	// engine can evaluate the most valuable rule first. Joined with categories
+	// so callers get the category name, not just its id.
+	ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]ListCardRewardCategoriesRow, error)
 	// The credit-card catalogue is global reference data, not per-user.
 	ListCreditCards(ctx context.Context) ([]CreditCard, error)
 	ListPlaidItemsByUser(ctx context.Context, userID uuid.UUID) ([]PlaidItem, error)
