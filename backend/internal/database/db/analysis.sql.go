@@ -181,3 +181,43 @@ func (q *Queries) GetTopMerchants(ctx context.Context, arg GetTopMerchantsParams
 	}
 	return items, nil
 }
+
+const getTrailingYearCategorySpend = `-- name: GetTrailingYearCategorySpend :many
+SELECT c.name AS category_name, SUM(t.amount_cents)::BIGINT AS total_cents
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN plaid_items i ON i.id = a.plaid_item_id
+JOIN categories c ON c.id = t.category_id
+WHERE i.user_id = $1
+  AND c.name NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')
+  AND t.date >= (CURRENT_DATE - INTERVAL '1 year')
+GROUP BY c.name
+`
+
+type GetTrailingYearCategorySpendRow struct {
+	CategoryName string `json:"category_name"`
+	TotalCents   int64  `json:"total_cents"`
+}
+
+// Same reward-eligible filter as GetSpendingByMonth, scoped to the trailing
+// 12 months so a card's annual value (phase 4c) reflects recent spend
+// instead of the user's entire history.
+func (q *Queries) GetTrailingYearCategorySpend(ctx context.Context, userID uuid.UUID) ([]GetTrailingYearCategorySpendRow, error) {
+	rows, err := q.db.Query(ctx, getTrailingYearCategorySpend, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTrailingYearCategorySpendRow{}
+	for rows.Next() {
+		var i GetTrailingYearCategorySpendRow
+		if err := rows.Scan(&i.CategoryName, &i.TotalCents); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -57,8 +57,10 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.P
 		})
 
 		r.Get("/accounts", srv.handleListAccounts)
+		r.Patch("/accounts/{id}", srv.handleLinkAccountCard)
 		r.Get("/transactions", srv.handleListTransactions)
 		r.Get("/cards", srv.handleListCards)
+		r.Get("/cards/{id}/value", srv.handleCardValue)
 		r.Get("/analysis/spending", srv.handleSpendingAnalysis)
 		r.Get("/recommendations", notImplemented("phase 5 (recommendations)"))
 	})

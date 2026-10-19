@@ -41,6 +41,10 @@ type Querier interface {
 	// top-N list. merchant_name is null when Plaid couldn't resolve one, so
 	// those fall back to the transaction's own name rather than being dropped.
 	GetTopMerchants(ctx context.Context, arg GetTopMerchantsParams) ([]GetTopMerchantsRow, error)
+	// Same reward-eligible filter as GetSpendingByMonth, scoped to the trailing
+	// 12 months so a card's annual value (phase 4c) reflects recent spend
+	// instead of the user's entire history.
+	GetTrailingYearCategorySpend(ctx context.Context, userID uuid.UUID) ([]GetTrailingYearCategorySpendRow, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	// Bonus-earning rules for a single card, highest rate first so the reward
 	// engine can evaluate the most valuable rule first. Joined with categories
@@ -55,6 +59,11 @@ type Querier interface {
 	// category_name is joined in so callers can display it without a second
 	// lookup against the categories table.
 	ListTransactionsByUser(ctx context.Context, arg ListTransactionsByUserParams) ([]ListTransactionsByUserRow, error)
+	// Links (or, when @credit_card_id is NULL, unlinks) an account to a
+	// catalogue card. Scoped to the owning user through plaid_items so a user
+	// can only relink their own accounts; no matching row means either the
+	// account doesn't exist or isn't theirs, and the caller treats both as 404.
+	UpdateAccountCreditCard(ctx context.Context, arg UpdateAccountCreditCardParams) (Account, error)
 	// Called after each page of /transactions/sync so a later page's failure
 	// does not re-fetch transactions the previous page already persisted.
 	UpdatePlaidItemCursor(ctx context.Context, arg UpdatePlaidItemCursorParams) error

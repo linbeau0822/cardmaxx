@@ -104,7 +104,14 @@ export interface Account {
   id: string
   name: string
   mask: string | null
-  /** The catalogue card this account is matched to, if any (matching isn't automatic yet). */
+  type: string
+  subtype: string | null
+  /**
+   * The catalogue card this account is matched to, if any. Set automatically
+   * on sync when the account's name unambiguously names a catalogue card's
+   * issuer and product; otherwise null until linkAccountCard is called (e.g.
+   * every Plaid Sandbox test account, whose generic name matches no issuer).
+   */
   credit_card_id: string | null
 }
 
@@ -191,4 +198,12 @@ export const api = {
 
   /** Lists the credit-card catalogue, each with its bonus reward categories. */
   listCards: () => request<CardsResponse>('/api/v1/cards'),
+
+  /** Links (or, given null, unlinks) an account to a catalogue card. */
+  linkAccountCard: (accountId: string, creditCardId: string | null) =>
+    request<Account>(`/api/v1/accounts/${accountId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credit_card_id: creditCardId }),
+    }),
 }

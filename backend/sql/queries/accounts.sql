@@ -38,3 +38,16 @@ ON CONFLICT (plaid_account_id) DO UPDATE SET
     subtype       = EXCLUDED.subtype,
     mask          = EXCLUDED.mask
 RETURNING *;
+
+-- name: UpdateAccountCreditCard :one
+-- Links (or, when @credit_card_id is NULL, unlinks) an account to a
+-- catalogue card. Scoped to the owning user through plaid_items so a user
+-- can only relink their own accounts; no matching row means either the
+-- account doesn't exist or isn't theirs, and the caller treats both as 404.
+UPDATE accounts a
+SET credit_card_id = @credit_card_id
+FROM plaid_items i
+WHERE a.id = @id
+  AND a.plaid_item_id = i.id
+  AND i.user_id = @user_id
+RETURNING a.id, a.plaid_item_id, a.credit_card_id, a.plaid_account_id, a.name, a.official_name, a.type, a.subtype, a.mask, a.created_at, a.updated_at;
