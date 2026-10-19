@@ -42,6 +42,20 @@ GROUP BY COALESCE(t.merchant_name, t.name)
 ORDER BY total_cents DESC
 LIMIT @result_limit;
 
+-- name: GetTrailingYearCategorySpend :many
+-- Same reward-eligible filter as GetSpendingByMonth, scoped to the trailing
+-- 12 months so a card's annual value (phase 4c) reflects recent spend
+-- instead of the user's entire history.
+SELECT c.name AS category_name, SUM(t.amount_cents)::BIGINT AS total_cents
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN plaid_items i ON i.id = a.plaid_item_id
+JOIN categories c ON c.id = t.category_id
+WHERE i.user_id = @user_id
+  AND c.name NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')
+  AND t.date >= (CURRENT_DATE - INTERVAL '1 year')
+GROUP BY c.name;
+
 -- name: GetSpendingByCategoryForMonth :many
 -- Same reward-eligible filter as GetSpendingByMonth, scoped to a single
 -- calendar month for the bar chart's month drill-down.

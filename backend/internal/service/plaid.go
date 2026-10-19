@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/linbeau0822/cardmaxx/backend/internal/database/db"
 	"github.com/linbeau0822/cardmaxx/backend/internal/plaid"
+	"github.com/linbeau0822/cardmaxx/backend/internal/reward"
 )
 
 // Querier is the slice of db.Querier that PlaidService needs. Declaring it
@@ -27,6 +29,7 @@ type Querier interface {
 	UpsertAccount(ctx context.Context, arg db.UpsertAccountParams) (db.Account, error)
 	GetAccountByPlaidAccountID(ctx context.Context, plaidAccountID string) (db.Account, error)
 	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]db.Account, error)
+	UpdateAccountCreditCard(ctx context.Context, arg db.UpdateAccountCreditCardParams) (db.Account, error)
 	UpsertTransaction(ctx context.Context, arg db.UpsertTransactionParams) (db.Transaction, error)
 	DeleteTransactionByPlaidID(ctx context.Context, plaidTransactionID string) error
 	ListTransactionsByUser(ctx context.Context, arg db.ListTransactionsByUserParams) ([]db.ListTransactionsByUserRow, error)
@@ -36,7 +39,9 @@ type Querier interface {
 	GetAllCategoriesForUser(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetTopMerchants(ctx context.Context, arg db.GetTopMerchantsParams) ([]db.GetTopMerchantsRow, error)
 	ListCreditCards(ctx context.Context) ([]db.CreditCard, error)
+	GetCreditCard(ctx context.Context, id uuid.UUID) (db.CreditCard, error)
 	ListCardRewardCategories(ctx context.Context, creditCardID uuid.UUID) ([]db.ListCardRewardCategoriesRow, error)
+	GetTrailingYearCategorySpend(ctx context.Context, userID uuid.UUID) ([]db.GetTrailingYearCategorySpendRow, error)
 }
 
 // PlaidClient is the slice of plaid.Client that PlaidService needs.
@@ -117,6 +122,11 @@ func (s *PlaidService) syncItem(ctx context.Context, item db.PlaidItem) (ItemSyn
 		cursor = *item.TransactionCursor
 	}
 
+	catalog, err := s.queries.ListCreditCards(ctx)
+	if err != nil {
+		return ItemSyncResult{}, fmt.Errorf("list credit cards: %w", err)
+	}
+
 	for {
 		page, err := s.plaid.SyncTransactions(ctx, item.AccessToken, cursor)
 		if err != nil {
@@ -124,7 +134,7 @@ func (s *PlaidService) syncItem(ctx context.Context, item db.PlaidItem) (ItemSyn
 		}
 
 		for _, a := range page.Accounts {
-			if _, err := s.queries.UpsertAccount(ctx, db.UpsertAccountParams{
+			account, err := s.queries.UpsertAccount(ctx, db.UpsertAccountParams{
 				PlaidItemID:    item.ID,
 				PlaidAccountID: a.PlaidAccountID,
 				Name:           a.Name,
@@ -132,8 +142,12 @@ func (s *PlaidService) syncItem(ctx context.Context, item db.PlaidItem) (ItemSyn
 				Type:           a.Type,
 				Subtype:        a.Subtype,
 				Mask:           a.Mask,
-			}); err != nil {
+			})
+			if err != nil {
 				return ItemSyncResult{}, fmt.Errorf("upsert account %s: %w", a.PlaidAccountID, err)
+			}
+			if err := s.autoLinkCard(ctx, item.UserID, account, catalog); err != nil {
+				return ItemSyncResult{}, err
 			}
 		}
 
@@ -208,6 +222,55 @@ func (s *PlaidService) upsertTransaction(ctx context.Context, t plaid.Transactio
 	return nil
 }
 
+// autoLinkCard matches a freshly-synced account to a catalogue card by name
+// and persists the match, when it's unambiguous. It never overwrites a
+// credit_card_id the account already has - whether set by an earlier
+// auto-link or by the user themselves via LinkAccountCard - so a re-sync
+// can't undo a user's own choice.
+func (s *PlaidService) autoLinkCard(ctx context.Context, userID uuid.UUID, account db.Account, catalog []db.CreditCard) error {
+	if account.CreditCardID != nil {
+		return nil
+	}
+	name := account.Name
+	if account.OfficialName != nil {
+		name = *account.OfficialName
+	}
+	cardID := matchCreditCardByName(name, catalog)
+	if cardID == nil {
+		return nil
+	}
+	if _, err := s.queries.UpdateAccountCreditCard(ctx, db.UpdateAccountCreditCardParams{
+		ID:           account.ID,
+		UserID:       userID,
+		CreditCardID: cardID,
+	}); err != nil {
+		return fmt.Errorf("auto-link account %s to card %s: %w", account.ID, *cardID, err)
+	}
+	return nil
+}
+
+// matchCreditCardByName finds the single catalogue card whose issuer and
+// name both appear in accountName, case-insensitively - e.g. Plaid's
+// official name "Chase Sapphire Preferred Card" matches issuer "Chase" and
+// name "Sapphire Preferred". Returns nil when no card matches or more than
+// one does: an ambiguous name (including every Plaid Sandbox test account,
+// whose generic names never name a real issuer) is left for the user to
+// resolve via LinkAccountCard instead of being guessed.
+func matchCreditCardByName(accountName string, catalog []db.CreditCard) *uuid.UUID {
+	lower := strings.ToLower(accountName)
+	var matched *uuid.UUID
+	for _, c := range catalog {
+		if strings.Contains(lower, strings.ToLower(c.Issuer)) && strings.Contains(lower, strings.ToLower(c.Name)) {
+			if matched != nil {
+				return nil
+			}
+			id := c.ID
+			matched = &id
+		}
+	}
+	return matched
+}
+
 // ListAccounts returns every account linked to the user.
 func (s *PlaidService) ListAccounts(ctx context.Context, userID uuid.UUID) ([]db.Account, error) {
 	return s.queries.ListAccountsByUser(ctx, userID)
@@ -268,4 +331,57 @@ func (s *PlaidService) ListCards(ctx context.Context) ([]CardWithRewardCategorie
 		result[i] = CardWithRewardCategories{CreditCard: card, RewardCategories: rewardCategories}
 	}
 	return result, nil
+}
+
+// LinkAccountCard links (or, when creditCardID is nil, unlinks) one of the
+// user's accounts to a catalogue card. Returns pgx.ErrNoRows if accountID
+// doesn't exist or doesn't belong to the user.
+func (s *PlaidService) LinkAccountCard(ctx context.Context, userID, accountID uuid.UUID, creditCardID *uuid.UUID) (db.Account, error) {
+	return s.queries.UpdateAccountCreditCard(ctx, db.UpdateAccountCreditCardParams{
+		ID:           accountID,
+		UserID:       userID,
+		CreditCardID: creditCardID,
+	})
+}
+
+// CardValue is a catalogue card's reward value against the user's own
+// trailing-12-month spend.
+type CardValue struct {
+	RewardsEarnedCents int64 `json:"rewards_earned_cents"`
+	AnnualFeeCents     int32 `json:"annual_fee_cents"`
+	AnnualValueCents   int64 `json:"annual_value_cents"`
+}
+
+// ValueForCard computes what cardID would have earned the user over their
+// trailing 12 months of reward-eligible spend, net of its annual fee.
+// Returns pgx.ErrNoRows if cardID isn't in the catalogue.
+func (s *PlaidService) ValueForCard(ctx context.Context, userID, cardID uuid.UUID) (CardValue, error) {
+	card, err := s.queries.GetCreditCard(ctx, cardID)
+	if err != nil {
+		return CardValue{}, fmt.Errorf("get credit card: %w", err)
+	}
+	rewardRows, err := s.queries.ListCardRewardCategories(ctx, cardID)
+	if err != nil {
+		return CardValue{}, fmt.Errorf("list reward categories: %w", err)
+	}
+	spendRows, err := s.queries.GetTrailingYearCategorySpend(ctx, userID)
+	if err != nil {
+		return CardValue{}, fmt.Errorf("get trailing year category spend: %w", err)
+	}
+
+	rules := make([]reward.CategoryRule, len(rewardRows))
+	for i, rc := range rewardRows {
+		rules[i] = reward.CategoryRule{CategoryName: rc.CategoryName, RateBps: rc.RewardRateBps, CapCents: rc.RewardCapCents}
+	}
+	spend := make([]reward.CategorySpend, len(spendRows))
+	for i, sp := range spendRows {
+		spend[i] = reward.CategorySpend{CategoryName: sp.CategoryName, TotalCents: sp.TotalCents}
+	}
+
+	earnedCents := reward.CalculateRewards(card.BaseRewardRateBps, rules, spend)
+	return CardValue{
+		RewardsEarnedCents: earnedCents,
+		AnnualFeeCents:     card.AnnualFeeCents,
+		AnnualValueCents:   reward.AnnualValueCents(earnedCents, card.AnnualFeeCents),
+	}, nil
 }

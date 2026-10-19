@@ -97,6 +97,45 @@ func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]A
 	return items, nil
 }
 
+const updateAccountCreditCard = `-- name: UpdateAccountCreditCard :one
+UPDATE accounts a
+SET credit_card_id = $1
+FROM plaid_items i
+WHERE a.id = $2
+  AND a.plaid_item_id = i.id
+  AND i.user_id = $3
+RETURNING a.id, a.plaid_item_id, a.credit_card_id, a.plaid_account_id, a.name, a.official_name, a.type, a.subtype, a.mask, a.created_at, a.updated_at
+`
+
+type UpdateAccountCreditCardParams struct {
+	CreditCardID *uuid.UUID `json:"credit_card_id"`
+	ID           uuid.UUID  `json:"id"`
+	UserID       uuid.UUID  `json:"user_id"`
+}
+
+// Links (or, when @credit_card_id is NULL, unlinks) an account to a
+// catalogue card. Scoped to the owning user through plaid_items so a user
+// can only relink their own accounts; no matching row means either the
+// account doesn't exist or isn't theirs, and the caller treats both as 404.
+func (q *Queries) UpdateAccountCreditCard(ctx context.Context, arg UpdateAccountCreditCardParams) (Account, error) {
+	row := q.db.QueryRow(ctx, updateAccountCreditCard, arg.CreditCardID, arg.ID, arg.UserID)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.PlaidItemID,
+		&i.CreditCardID,
+		&i.PlaidAccountID,
+		&i.Name,
+		&i.OfficialName,
+		&i.Type,
+		&i.Subtype,
+		&i.Mask,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertAccount = `-- name: UpsertAccount :one
 INSERT INTO accounts (
     plaid_item_id,

@@ -23,10 +23,12 @@ import (
 // fakeQuerier is an in-memory stand-in for service.Querier, so these tests
 // exercise the HTTP layer without a database.
 type fakeQuerier struct {
-	accounts     []db.Account
-	transactions []db.Transaction
-	plaidItems   []db.PlaidItem
-	cards        []db.CreditCard
+	accounts      []db.Account
+	transactions  []db.Transaction
+	plaidItems    []db.PlaidItem
+	cards         []db.CreditCard
+	categorySpend []db.GetTrailingYearCategorySpendRow
+	linkCardErr   error
 }
 
 func (f *fakeQuerier) CreatePlaidItem(_ context.Context, arg db.CreatePlaidItemParams) (db.PlaidItem, error) {
@@ -46,6 +48,12 @@ func (f *fakeQuerier) GetAccountByPlaidAccountID(_ context.Context, _ string) (d
 }
 func (f *fakeQuerier) ListAccountsByUser(_ context.Context, _ uuid.UUID) ([]db.Account, error) {
 	return f.accounts, nil
+}
+func (f *fakeQuerier) UpdateAccountCreditCard(_ context.Context, arg db.UpdateAccountCreditCardParams) (db.Account, error) {
+	if f.linkCardErr != nil {
+		return db.Account{}, f.linkCardErr
+	}
+	return db.Account{ID: arg.ID, CreditCardID: arg.CreditCardID}, nil
 }
 func (f *fakeQuerier) UpsertTransaction(_ context.Context, arg db.UpsertTransactionParams) (db.Transaction, error) {
 	return db.Transaction{ID: uuid.New(), PlaidTransactionID: arg.PlaidTransactionID}, nil
@@ -78,8 +86,19 @@ func (f *fakeQuerier) GetTopMerchants(_ context.Context, _ db.GetTopMerchantsPar
 func (f *fakeQuerier) ListCreditCards(_ context.Context) ([]db.CreditCard, error) {
 	return f.cards, nil
 }
+func (f *fakeQuerier) GetCreditCard(_ context.Context, id uuid.UUID) (db.CreditCard, error) {
+	for _, c := range f.cards {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return db.CreditCard{}, pgx.ErrNoRows
+}
 func (f *fakeQuerier) ListCardRewardCategories(_ context.Context, _ uuid.UUID) ([]db.ListCardRewardCategoriesRow, error) {
 	return nil, nil
+}
+func (f *fakeQuerier) GetTrailingYearCategorySpend(_ context.Context, _ uuid.UUID) ([]db.GetTrailingYearCategorySpendRow, error) {
+	return f.categorySpend, nil
 }
 
 // fakePlaidClient is an in-memory stand-in for service.PlaidClient, so these
@@ -292,6 +311,79 @@ func TestListCards(t *testing.T) {
 	}
 	if body["cards"][0]["name"] != "Sapphire Preferred" {
 		t.Errorf("cards[0].name = %v, want Sapphire Preferred", body["cards"][0]["name"])
+	}
+}
+
+func TestLinkAccountCard(t *testing.T) {
+	accountID := uuid.New()
+	cardID := uuid.New()
+	q := &fakeQuerier{accounts: []db.Account{{ID: accountID}}}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+
+	body, _ := json.Marshal(map[string]string{"credit_card_id": cardID.String()})
+	rec := doOn(t, handler, http.MethodPatch, "/api/v1/accounts/"+accountID.String(), nil, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var account db.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &account); err != nil {
+		t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+	if account.CreditCardID == nil || *account.CreditCardID != cardID {
+		t.Errorf("credit_card_id = %v, want %s", account.CreditCardID, cardID)
+	}
+}
+
+func TestLinkAccountCardNotFound(t *testing.T) {
+	q := &fakeQuerier{linkCardErr: pgx.ErrNoRows}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+
+	rec := doOn(t, handler, http.MethodPatch, "/api/v1/accounts/"+uuid.New().String(), nil, []byte(`{}`))
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestLinkAccountCardRejectsBadID(t *testing.T) {
+	rec := doOn(t, newTestRouter(), http.MethodPatch, "/api/v1/accounts/not-a-uuid", nil, []byte(`{}`))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestCardValue(t *testing.T) {
+	cardID := uuid.New()
+	q := &fakeQuerier{
+		cards:         []db.CreditCard{{ID: cardID, Name: "Freedom Unlimited", BaseRewardRateBps: 150, AnnualFeeCents: 0}},
+		categorySpend: []db.GetTrailingYearCategorySpendRow{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
+	}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+
+	rec := doOn(t, handler, http.MethodGet, "/api/v1/cards/"+cardID.String()+"/value", nil, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body map[string]int64
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+	if body["rewards_earned_cents"] != 150 {
+		t.Errorf("rewards_earned_cents = %d, want 150 (1.5%% of $100)", body["rewards_earned_cents"])
+	}
+	if body["annual_value_cents"] != 150 {
+		t.Errorf("annual_value_cents = %d, want 150", body["annual_value_cents"])
+	}
+}
+
+func TestCardValueNotFound(t *testing.T) {
+	rec := do(t, http.MethodGet, "/api/v1/cards/"+uuid.New().String()+"/value", nil)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 }
 

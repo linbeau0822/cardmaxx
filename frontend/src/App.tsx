@@ -23,6 +23,9 @@ export default function App() {
   const [linkToken, setLinkToken] = useState<string | null>(null)
   // Bumped after every successful sync so the transactions sidebar refetches.
   const [transactionsVersion, setTransactionsVersion] = useState(0)
+  // Bumped after the user manually links an account to a card, so this
+  // account list (and the Your Cards panel reading it) picks up the change.
+  const [accountsVersion, setAccountsVersion] = useState(0)
   // null while loading, so the dashboard doesn't flash "no accounts" first.
   const [accounts, setAccounts] = useState<Account[] | null>(null)
 
@@ -39,7 +42,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [transactionsVersion])
+  }, [transactionsVersion, accountsVersion])
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>((publicToken) => {
     if (!publicToken) return
@@ -129,7 +132,7 @@ export default function App() {
           <div className="mt-10 flex items-start gap-6">
             <div className="min-w-0 flex-1 grid gap-4">
               <SpendingOverview refreshKey={transactionsVersion} />
-              <CardsPanel accounts={accounts} />
+              <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
               <Panel
                 title="Recommendations"
                 subtitle="Cards that would have earned you more on the spending you already do."

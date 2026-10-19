@@ -8,12 +8,20 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/linbeau0822/cardmaxx/backend/internal/database/db"
 	"github.com/linbeau0822/cardmaxx/backend/internal/plaid"
 	"github.com/linbeau0822/cardmaxx/backend/internal/service"
 )
+
+// foreignKeyViolation is the PostgreSQL error code for a foreign-key
+// constraint failure, e.g. linking an account to a credit_card_id that
+// doesn't exist in the catalogue.
+const foreignKeyViolation = "23503"
 
 // Server holds the dependencies Phase 2's handlers need.
 //
@@ -215,6 +223,68 @@ func (s *Server) handleListCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"cards": cards})
+}
+
+// linkAccountCardRequest carries the catalogue card to match an account to.
+// A nil CreditCardID unlinks the account.
+type linkAccountCardRequest struct {
+	CreditCardID *uuid.UUID `json:"credit_card_id"`
+}
+
+// handleLinkAccountCard matches (or, given a null credit_card_id, unmatches)
+// one of the current user's accounts to a catalogue card.
+func (s *Server) handleLinkAccountCard(w http.ResponseWriter, r *http.Request) {
+	accountID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "id must be a UUID")
+		return
+	}
+
+	var req linkAccountCardRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "request body must be JSON with an optional credit_card_id field")
+		return
+	}
+
+	account, err := s.plaid.LinkAccountCard(r.Context(), s.currentUserID, accountID, req.CreditCardID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, CodeNotFound, "no account with that id")
+			return
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+			writeError(w, http.StatusBadRequest, CodeBadRequest, "no card with that credit_card_id")
+			return
+		}
+		s.logger.ErrorContext(r.Context(), "link account card failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to link account")
+		return
+	}
+	writeJSON(w, http.StatusOK, account)
+}
+
+// handleCardValue reports what a catalogue card would earn the current user,
+// based on their trailing-12-month reward-eligible spend, net of its annual
+// fee.
+func (s *Server) handleCardValue(w http.ResponseWriter, r *http.Request) {
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "id must be a UUID")
+		return
+	}
+
+	value, err := s.plaid.ValueForCard(r.Context(), s.currentUserID, cardID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, CodeNotFound, "no card with that id")
+			return
+		}
+		s.logger.ErrorContext(r.Context(), "card value failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to compute card value")
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
 }
 
 // topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard
