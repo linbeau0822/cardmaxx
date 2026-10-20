@@ -462,7 +462,7 @@ func (s *PlaidService) RecommendCards(ctx context.Context, userID uuid.UUID) ([]
 		}
 		currentProfiles = append(currentProfiles, profile)
 	}
-	currentTotalCents, currentWinners := reward.PortfolioRewards(currentProfiles, spend)
+	currentTotalCents, currentAllocations := reward.PortfolioRewards(currentProfiles, spend)
 
 	var recommendations []CardRecommendation
 	for _, card := range catalog {
@@ -480,18 +480,19 @@ func (s *PlaidService) RecommendCards(ctx context.Context, userID uuid.UUID) ([]
 		candidates := make([]reward.CardProfile, len(currentProfiles)+1)
 		copy(candidates, currentProfiles)
 		candidates[len(currentProfiles)] = profile
-		withCandidateCents, winners := reward.PortfolioRewards(candidates, spend)
+		withCandidateCents, allocations := reward.PortfolioRewards(candidates, spend)
 
 		var won []CategoryWin
-		for category, winner := range winners {
-			if winner.CardID != profile.ID {
+		for category, catAllocations := range allocations {
+			newRateBps, ok := candidateRateFor(catAllocations, profile.ID)
+			if !ok {
 				continue
 			}
 			previousRateBps := int32(0)
-			if prev, ok := currentWinners[category]; ok {
-				previousRateBps = prev.RateBps
+			if prevAllocations, ok := currentAllocations[category]; ok && len(prevAllocations) > 0 {
+				previousRateBps = prevAllocations[0].RateBps
 			}
-			won = append(won, CategoryWin{CategoryName: category, PreviousRateBps: previousRateBps, NewRateBps: winner.RateBps})
+			won = append(won, CategoryWin{CategoryName: category, PreviousRateBps: previousRateBps, NewRateBps: newRateBps})
 		}
 		sort.Slice(won, func(i, j int) bool { return won[i].CategoryName < won[j].CategoryName })
 
@@ -506,4 +507,113 @@ func (s *PlaidService) RecommendCards(ctx context.Context, userID uuid.UUID) ([]
 		return recommendations[i].IncrementalValueCents > recommendations[j].IncrementalValueCents
 	})
 	return recommendations, nil
+}
+
+// candidateRateFor returns the rate cardID earns within a category's
+// allocations, if it earns any of that category at all. Allocations are
+// ordered highest-rate first, so the first match is also the best rate that
+// card earns in the category.
+func candidateRateFor(allocations []reward.CategoryAllocation, cardID string) (rateBps int32, ok bool) {
+	for _, a := range allocations {
+		if a.CardID == cardID {
+			return a.RateBps, true
+		}
+	}
+	return 0, false
+}
+
+// maxPortfolioSize caps how many cards OptimizePortfolio will ever consider
+// holding at once. The catalogue is small (five cards today), so checking
+// every combination up to this size is cheap; raise it only if a much
+// larger catalogue makes brute force too slow.
+const maxPortfolioSize = 5
+
+// combinations returns every subset of size k from cards, order-independent
+// (picking {A, B} is the same combination as {B, A}).
+func combinations(cards []db.CreditCard, k int) [][]db.CreditCard {
+	var out [][]db.CreditCard
+	chosen := make([]db.CreditCard, 0, k)
+	var pick func(start int)
+	pick = func(start int) {
+		if len(chosen) == k {
+			out = append(out, append([]db.CreditCard{}, chosen...))
+			return
+		}
+		for i := start; i < len(cards); i++ {
+			chosen = append(chosen, cards[i])
+			pick(i + 1)
+			chosen = chosen[:len(chosen)-1]
+		}
+	}
+	pick(0)
+	return out
+}
+
+// PortfolioOption is the best combination of catalogue cards at one
+// portfolio size.
+type PortfolioOption struct {
+	Cards              []db.CreditCard `json:"cards"`
+	RewardsEarnedCents int64           `json:"rewards_earned_cents"`
+	AnnualFeesCents    int64           `json:"annual_fees_cents"`
+	NetValueCents      int64           `json:"net_value_cents"`
+	// MarginalValueCents is how much more net value this size buys over the
+	// best smaller size (or, at size 1, over holding no cards at all) - the
+	// number that shows whether the next card is worth its fee.
+	MarginalValueCents int64 `json:"marginal_value_cents"`
+}
+
+// OptimizePortfolio finds, for every portfolio size from 1 up to the
+// catalogue size (capped at maxPortfolioSize), the combination of catalogue
+// cards that earns the most net value on the user's trailing-12-month
+// spend: rewards earned across the set, routed to whichever card in it pays
+// best per category including overflow past any one card's cap, minus the
+// combination's total annual fees.
+func (s *PlaidService) OptimizePortfolio(ctx context.Context, userID uuid.UUID) ([]PortfolioOption, error) {
+	catalog, err := s.queries.ListCreditCards(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list credit cards: %w", err)
+	}
+	spend, err := s.trailingYearSpend(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	profiles := make(map[uuid.UUID]reward.CardProfile, len(catalog))
+	for _, card := range catalog {
+		profile, err := s.cardProfile(ctx, card)
+		if err != nil {
+			return nil, err
+		}
+		profiles[card.ID] = profile
+	}
+
+	maxSize := maxPortfolioSize
+	if len(catalog) < maxSize {
+		maxSize = len(catalog)
+	}
+
+	var options []PortfolioOption
+	var previousBestNetCents int64
+	for size := 1; size <= maxSize; size++ {
+		var best PortfolioOption
+		var found bool
+		for _, combo := range combinations(catalog, size) {
+			comboProfiles := make([]reward.CardProfile, len(combo))
+			var feesCents int64
+			for i, card := range combo {
+				comboProfiles[i] = profiles[card.ID]
+				feesCents += int64(card.AnnualFeeCents)
+			}
+			rewardsCents, _ := reward.PortfolioRewards(comboProfiles, spend)
+			netCents := rewardsCents - feesCents
+			if !found || netCents > best.NetValueCents {
+				found = true
+				best = PortfolioOption{Cards: combo, RewardsEarnedCents: rewardsCents, AnnualFeesCents: feesCents, NetValueCents: netCents}
+			}
+		}
+		best.MarginalValueCents = best.NetValueCents - previousBestNetCents
+		options = append(options, best)
+		previousBestNetCents = best.NetValueCents
+	}
+	return options, nil
 }

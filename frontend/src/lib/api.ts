@@ -189,6 +189,19 @@ export interface RecommendationsResponse {
   recommendations: CardRecommendation[]
 }
 
+export interface PortfolioOption {
+  cards: RecommendedCard[]
+  rewards_earned_cents: number
+  annual_fees_cents: number
+  net_value_cents: number
+  /** How much more net value this size buys over the best smaller size. */
+  marginal_value_cents: number
+}
+
+export interface PortfolioOptionsResponse {
+  options: PortfolioOption[]
+}
+
 export const api = {
   /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
@@ -237,4 +250,10 @@ export const api = {
    * annual value each would add on top of their current cards.
    */
   recommendations: () => request<RecommendationsResponse>('/api/v1/recommendations'),
+
+  /**
+   * Finds, for every portfolio size from 1 card up, the combination of
+   * catalogue cards that earns the most net annual value.
+   */
+  optimizePortfolio: () => request<PortfolioOptionsResponse>('/api/v1/recommendations/portfolio'),
 }

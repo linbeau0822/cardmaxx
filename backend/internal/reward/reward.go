@@ -5,6 +5,8 @@
 // and the recommendation/optimization engine (Phase 5-6).
 package reward
 
+import "sort"
+
 // CategoryRule is one bonus-category reward rule for a card: it earns
 // RateBps on spend in CategoryName, up to CapCents per year (nil = uncapped).
 // Spend beyond the cap earns the card's base rate instead.
@@ -63,62 +65,78 @@ type CardProfile struct {
 	Rules       []CategoryRule
 }
 
-// rateForCategory returns the rate (and cap, if any) this card pays on a
-// category: its bonus rule if it has one, otherwise its uncapped base rate.
-func (c CardProfile) rateForCategory(categoryName string) (rateBps int32, capCents *int64) {
-	for _, rule := range c.Rules {
-		if rule.CategoryName == categoryName {
-			return rule.RateBps, rule.CapCents
-		}
-	}
-	return c.BaseRateBps, nil
+// rateTier is one card's claim on a category's spend at a given rate, up to
+// capCents (nil = uncapped).
+type rateTier struct {
+	cardID   string
+	rateBps  int32
+	capCents *int64
 }
 
-// CategoryWinner is which card earned a spend category's rewards in a
-// PortfolioRewards comparison, and at what rate.
-type CategoryWinner struct {
-	CardID  string
-	RateBps int32
+// tiersForCategory returns this card's rate tiers for a category: its bonus
+// rule (if it has one for this category) ranked ahead of its own base rate,
+// which is always included as the uncapped fallback once any bonus cap is
+// exhausted.
+func (c CardProfile) tiersForCategory(categoryName string) []rateTier {
+	for _, rule := range c.Rules {
+		if rule.CategoryName == categoryName {
+			return []rateTier{
+				{cardID: c.ID, rateBps: rule.RateBps, capCents: rule.CapCents},
+				{cardID: c.ID, rateBps: c.BaseRateBps},
+			}
+		}
+	}
+	return []rateTier{{cardID: c.ID, rateBps: c.BaseRateBps}}
+}
+
+// CategoryAllocation is the portion of a category's spend that one card
+// earns, and at what rate, within a PortfolioRewards comparison.
+type CategoryAllocation struct {
+	CardID     string
+	RateBps    int32
+	SpendCents int64
 }
 
 // PortfolioRewards sums what a set of cards earns on spend when each
 // category routes to whichever card in the set pays the best rate for it -
 // the way a rational cardholder actually spends, rather than putting every
-// purchase on one card. It also reports which card won each category, so a
-// caller can explain why a card beats what the user already has.
-//
-// Spend that overflows the winning card's cap keeps earning on that same
-// card's base rate rather than shifting to a second card's bonus rate;
-// routing overflow across cards is portfolio optimization (Phase 6), not
-// single-card recommendation (Phase 5).
+// purchase on one card. Spend that overflows a card's bonus cap spills to
+// the next-best rate among every tier in the set - another card's bonus or
+// base rate, or (last) the spilling card's own base rate - rather than
+// stopping at that one card, so a multi-card portfolio gets credit for
+// routing spend to whichever card actually covers it. It also reports each
+// category's allocations (highest rate first), so a caller can explain why
+// a card beats what the user already has.
 //
 // Ties keep the earlier card in `cards`, so a currently-held card beats an
 // equally-rated candidate instead of crediting a new card for no gain.
-func PortfolioRewards(cards []CardProfile, spend []CategorySpend) (totalCents int64, winners map[string]CategoryWinner) {
-	winners = make(map[string]CategoryWinner, len(spend))
+func PortfolioRewards(cards []CardProfile, spend []CategorySpend) (totalCents int64, allocations map[string][]CategoryAllocation) {
+	allocations = make(map[string][]CategoryAllocation, len(spend))
 	for _, s := range spend {
-		var best CardProfile
-		var bestRate int32 = -1
-		var bestCap *int64
+		var tiers []rateTier
 		for _, c := range cards {
-			rate, cap := c.rateForCategory(s.CategoryName)
-			if rate > bestRate {
-				best, bestRate, bestCap = c, rate, cap
-			}
+			tiers = append(tiers, c.tiersForCategory(s.CategoryName)...)
 		}
-		if bestRate < 0 {
-			continue // no cards to earn with
-		}
+		sort.SliceStable(tiers, func(i, j int) bool { return tiers[i].rateBps > tiers[j].rateBps })
 
-		bonusCents := s.TotalCents
-		if bestCap != nil && bonusCents > *bestCap {
-			bonusCents = *bestCap
+		remainingCents := s.TotalCents
+		for _, t := range tiers {
+			if remainingCents <= 0 {
+				break
+			}
+			amountCents := remainingCents
+			if t.capCents != nil && amountCents > *t.capCents {
+				amountCents = *t.capCents
+			}
+			if amountCents <= 0 {
+				continue
+			}
+			totalCents += earnCents(amountCents, t.rateBps)
+			allocations[s.CategoryName] = append(allocations[s.CategoryName], CategoryAllocation{CardID: t.cardID, RateBps: t.rateBps, SpendCents: amountCents})
+			remainingCents -= amountCents
 		}
-		totalCents += earnCents(bonusCents, bestRate)
-		totalCents += earnCents(s.TotalCents-bonusCents, best.BaseRateBps)
-		winners[s.CategoryName] = CategoryWinner{CardID: best.ID, RateBps: bestRate}
 	}
-	return totalCents, winners
+	return totalCents, allocations
 }
 
 // AnnualValueCents nets a card's rewards earned over a year against its

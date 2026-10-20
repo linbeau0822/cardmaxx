@@ -63,6 +63,7 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.P
 		r.Get("/cards/{id}/value", srv.handleCardValue)
 		r.Get("/analysis/spending", srv.handleSpendingAnalysis)
 		r.Get("/recommendations", srv.handleRecommendations)
+		r.Get("/recommendations/portfolio", srv.handleOptimizePortfolio)
 	})
 
 	return r

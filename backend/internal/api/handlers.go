@@ -290,6 +290,19 @@ func (s *Server) handleRecommendations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"recommendations": recommendations})
 }
 
+// handleOptimizePortfolio returns, for every portfolio size from 1 card up,
+// the combination of catalogue cards that earns the most net annual value
+// on the current user's spend.
+func (s *Server) handleOptimizePortfolio(w http.ResponseWriter, r *http.Request) {
+	options, err := s.plaid.OptimizePortfolio(r.Context(), s.currentUserID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "optimize portfolio failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to optimize portfolio")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"options": options})
+}
+
 // topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard
 // shows a leaderboard, not a full export, so there's no pagination to size for.
 const topMerchantsLimit = 10

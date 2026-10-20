@@ -68,29 +68,34 @@ func TestPortfolioRewards(t *testing.T) {
 	flat2 := CardProfile{ID: "flat-2", BaseRateBps: 100}
 	dining := CardProfile{ID: "dining", BaseRateBps: 100, Rules: []CategoryRule{{CategoryName: "FOOD_AND_DRINK", RateBps: 400}}}
 	cappedDining := CardProfile{ID: "capped-dining", BaseRateBps: 100, Rules: []CategoryRule{{CategoryName: "FOOD_AND_DRINK", RateBps: 400, CapCents: capCents(500_000)}}}
+	betterFlat := CardProfile{ID: "better-flat", BaseRateBps: 200}
 
 	tests := map[string]struct {
-		cards       []CardProfile
-		spend       []CategorySpend
-		wantCents   int64
-		wantWinners map[string]CategoryWinner
+		cards           []CardProfile
+		spend           []CategorySpend
+		wantCents       int64
+		wantAllocations map[string][]CategoryAllocation
 	}{
 		"no cards earns nothing": {
-			spend:       []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
-			wantCents:   0,
-			wantWinners: map[string]CategoryWinner{},
+			spend:           []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
+			wantCents:       0,
+			wantAllocations: map[string][]CategoryAllocation{},
 		},
 		"single card earns its own rate": {
-			cards:       []CardProfile{flat},
-			spend:       []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
-			wantCents:   100,
-			wantWinners: map[string]CategoryWinner{"FOOD_AND_DRINK": {CardID: "flat", RateBps: 100}},
+			cards:     []CardProfile{flat},
+			spend:     []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
+			wantCents: 100,
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {{CardID: "flat", RateBps: 100, SpendCents: 10000}},
+			},
 		},
 		"bonus card beats a flat card on its own category": {
-			cards:       []CardProfile{flat, dining},
-			spend:       []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
-			wantCents:   400, // dining's 4%, not flat's 1%
-			wantWinners: map[string]CategoryWinner{"FOOD_AND_DRINK": {CardID: "dining", RateBps: 400}},
+			cards:     []CardProfile{flat, dining},
+			spend:     []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
+			wantCents: 400, // dining's 4%, not flat's 1%
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {{CardID: "dining", RateBps: 400, SpendCents: 10000}},
+			},
 		},
 		"flat card still wins categories the bonus card doesn't cover": {
 			cards: []CardProfile{flat, dining},
@@ -99,34 +104,55 @@ func TestPortfolioRewards(t *testing.T) {
 				{CategoryName: "TRAVEL", TotalCents: 5000},
 			},
 			wantCents: 400 + 50,
-			wantWinners: map[string]CategoryWinner{
-				"FOOD_AND_DRINK": {CardID: "dining", RateBps: 400},
-				"TRAVEL":         {CardID: "flat", RateBps: 100},
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {{CardID: "dining", RateBps: 400, SpendCents: 10000}},
+				"TRAVEL":         {{CardID: "flat", RateBps: 100, SpendCents: 5000}},
 			},
 		},
-		"spend past the winning card's cap falls back to that card's own base rate": {
+		"spend past the winning card's cap falls back to that card's own base rate when no other card is in the set": {
 			cards: []CardProfile{cappedDining},
 			spend: []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 1_000_000}},
 			// 4% on the first $5,000, 1% base on the remaining $5,000.
-			wantCents:   500_000*400/10000 + 500_000*100/10000,
-			wantWinners: map[string]CategoryWinner{"FOOD_AND_DRINK": {CardID: "capped-dining", RateBps: 400}},
+			wantCents: 500_000*400/10000 + 500_000*100/10000,
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {
+					{CardID: "capped-dining", RateBps: 400, SpendCents: 500_000},
+					{CardID: "capped-dining", RateBps: 100, SpendCents: 500_000},
+				},
+			},
+		},
+		"spend past the winning card's cap spills to a second card's better base rate": {
+			cards: []CardProfile{cappedDining, betterFlat},
+			spend: []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 1_000_000}},
+			// 4% on the first $5,000 (capped-dining's bonus), then
+			// better-flat's 2% base on the rest - beats falling back to
+			// capped-dining's own 1% base.
+			wantCents: 500_000*400/10000 + 500_000*200/10000,
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {
+					{CardID: "capped-dining", RateBps: 400, SpendCents: 500_000},
+					{CardID: "better-flat", RateBps: 200, SpendCents: 500_000},
+				},
+			},
 		},
 		"ties keep the earlier card": {
-			cards:       []CardProfile{flat, flat2},
-			spend:       []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
-			wantCents:   100,
-			wantWinners: map[string]CategoryWinner{"FOOD_AND_DRINK": {CardID: "flat", RateBps: 100}},
+			cards:     []CardProfile{flat, flat2},
+			spend:     []CategorySpend{{CategoryName: "FOOD_AND_DRINK", TotalCents: 10000}},
+			wantCents: 100,
+			wantAllocations: map[string][]CategoryAllocation{
+				"FOOD_AND_DRINK": {{CardID: "flat", RateBps: 100, SpendCents: 10000}},
+			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			gotCents, gotWinners := PortfolioRewards(tc.cards, tc.spend)
+			gotCents, gotAllocations := PortfolioRewards(tc.cards, tc.spend)
 			if gotCents != tc.wantCents {
 				t.Errorf("PortfolioRewards() cents = %d, want %d", gotCents, tc.wantCents)
 			}
-			if !reflect.DeepEqual(gotWinners, tc.wantWinners) {
-				t.Errorf("PortfolioRewards() winners = %v, want %v", gotWinners, tc.wantWinners)
+			if !reflect.DeepEqual(gotAllocations, tc.wantAllocations) {
+				t.Errorf("PortfolioRewards() allocations = %v, want %v", gotAllocations, tc.wantAllocations)
 			}
 		})
 	}
