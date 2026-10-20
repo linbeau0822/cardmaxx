@@ -523,9 +523,9 @@ func candidateRateFor(allocations []reward.CategoryAllocation, cardID string) (r
 }
 
 // maxPortfolioSize caps how many cards OptimizePortfolio will ever consider
-// holding at once. The catalogue is small (a dozen cards today), so
-// checking every combination up to this size is cheap; raise it only if a
-// much larger catalogue makes brute force too slow.
+// holding at once. The catalogue is small (five cards today), so checking
+// every combination up to this size is cheap; raise it only if a much
+// larger catalogue makes brute force too slow.
 const maxPortfolioSize = 5
 
 // combinations returns every subset of size k from cards, order-independent
