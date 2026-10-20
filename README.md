@@ -450,6 +450,32 @@ GET /api/v1/recommendations  →  200 OK
 }
 ```
 
+#### `GET /api/v1/recommendations/portfolio`
+
+For every portfolio size from 1 card up to the catalogue size (capped at 5),
+the combination of catalogue cards with the highest net value on the
+current user's trailing-12-month spend: rewards earned across the set
+(spend that overflows one card's bonus cap routes to the next-best card in
+the set, not just that card's base rate) minus the combination's total
+annual fees. `marginal_value_cents` is the net value a size adds over the
+best smaller size.
+
+```http
+GET /api/v1/recommendations/portfolio  →  200 OK
+
+{
+  "options": [
+    {
+      "cards": [{ "id": "...", "name": "Sapphire Preferred", "issuer": "Chase", "annual_fee_cents": 9500, "base_reward_rate_bps": 100 }],
+      "rewards_earned_cents": 48600,
+      "annual_fees_cents": 9500,
+      "net_value_cents": 39100,
+      "marginal_value_cents": 39100
+    }
+  ]
+}
+```
+
 ### Errors
 
 Every error uses one envelope, with a stable machine-readable `code`:
