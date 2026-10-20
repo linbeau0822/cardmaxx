@@ -413,6 +413,59 @@ func TestRecommendations(t *testing.T) {
 	}
 }
 
+func TestOptimizePortfolio(t *testing.T) {
+	cheapFlat := db.CreditCard{ID: uuid.New(), Name: "Flat 1%", BaseRewardRateBps: 100}
+	pricyDining := db.CreditCard{ID: uuid.New(), Name: "Dining 4%", AnnualFeeCents: 9500, BaseRewardRateBps: 100}
+	q := &fakeQuerier{
+		cards: []db.CreditCard{cheapFlat, pricyDining},
+		rewardCategories: map[uuid.UUID][]db.ListCardRewardCategoriesRow{
+			pricyDining.ID: {{CategoryName: "FOOD_AND_DRINK", RewardRateBps: 400}},
+		},
+		categorySpend: []db.GetTrailingYearCategorySpendRow{{CategoryName: "FOOD_AND_DRINK", TotalCents: 1_000_000}},
+	}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+
+	rec := doOn(t, handler, http.MethodGet, "/api/v1/recommendations/portfolio", nil, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body struct {
+		Options []struct {
+			Cards              []db.CreditCard `json:"cards"`
+			RewardsEarnedCents int64           `json:"rewards_earned_cents"`
+			AnnualFeesCents    int64           `json:"annual_fees_cents"`
+			NetValueCents      int64           `json:"net_value_cents"`
+			MarginalValueCents int64           `json:"marginal_value_cents"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+
+	if len(body.Options) != 2 {
+		t.Fatalf("got %d options, want 2 (one per catalogue size up to 2 cards)", len(body.Options))
+	}
+
+	// Size 1: dining's 4% on $10,000 ($400) beats its $95 fee, and beats
+	// flat's 1% ($100) outright - dining alone should win.
+	size1 := body.Options[0]
+	if len(size1.Cards) != 1 || size1.Cards[0].ID != pricyDining.ID {
+		t.Fatalf("size-1 option cards = %v, want [%s]", size1.Cards, pricyDining.ID)
+	}
+	if want := int64(400_00 - 95_00); size1.NetValueCents != want {
+		t.Errorf("size-1 net_value_cents = %d, want %d", size1.NetValueCents, want)
+	}
+
+	// Size 2: holding both adds nothing (dining already wins the only spend
+	// category, flat has no category to add), so the marginal value of the
+	// second card is exactly flat's $0 fee minus nothing gained.
+	size2 := body.Options[1]
+	if size2.MarginalValueCents != 0 {
+		t.Errorf("size-2 marginal_value_cents = %d, want 0 (second card adds nothing here)", size2.MarginalValueCents)
+	}
+}
+
 func TestSpendingByCategory(t *testing.T) {
 	rec := do(t, http.MethodGet, "/api/v1/analysis/spending", nil)
 

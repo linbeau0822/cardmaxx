@@ -26,9 +26,9 @@ demo. Specifically, it is a vehicle for:
 
 ## Current Status
 
-**Phases 1-5 are done**, backend and frontend. The dashboard connects real
-accounts via Plaid Link, syncs transactions, and shows spending analysis and
-the user's matched cards.
+**Phases 1-6 are done**, backend and frontend. The dashboard connects real
+accounts via Plaid Link, syncs transactions, and shows spending analysis, the
+user's matched cards, and portfolio recommendations.
 
 What works today:
 
@@ -48,8 +48,16 @@ accounts via `PATCH /api/v1/accounts/{id}` and `GET /api/v1/cards/{id}/value`
 catalogue cards the user doesn't hold by the incremental annual value each
 would add on top of their current cards - what the card would capture in
 spend categories where it beats what they already have, net of its annual
-fee, not its value in isolation. Portfolio optimization across combinations
-of cards is Phase 6.
+fee, not its value in isolation. `GET /api/v1/recommendations/portfolio`
+(Phase 6) generalizes this to whole combinations: for every portfolio size
+from 1 card up to the catalogue size, it brute-forces every combination
+(the catalogue is small enough that this is cheap) and finds the one with
+the highest net value - rewards earned across the set, with spend that
+overflows one card's bonus cap now routed to the next-best card in the set
+rather than falling back to that same card's base rate, minus the
+combination's total annual fees. Each size also reports its marginal value
+over the best smaller size, so the dashboard can show exactly where adding
+another card stops paying for its own fee.
 
 The frontend opens the real Plaid Link widget via `react-plaid-link` from the
 "Connect Account" button, and POSTs its `public_token` to `/exchange-token`
@@ -70,7 +78,7 @@ Cards" panel offers a manual picker for whatever's left unmatched, backed by
 | Reward calculation and annual value | Done — phase 4b |
 | Account-to-card linking and per-card value | Done — phase 4c |
 | Current-wallet analysis and card recommendations | Done — phase 5 |
-| Portfolio optimization | Planned — phase 6 |
+| Portfolio optimization | Done — phase 6 |
 | AI-generated explanations | Planned — phase 7 |
 
 ## Architecture
@@ -527,11 +535,11 @@ Two conventions matter:
 
 ### Phase 6 — Portfolio Optimization
 
-- [ ] Evaluate card combinations
-- [ ] Optimize rewards
-- [ ] Account for annual fees
-- [ ] Account for spending caps
-- [ ] Evaluate opportunity cost
+- [x] Evaluate card combinations
+- [x] Optimize rewards
+- [x] Account for annual fees
+- [x] Account for spending caps
+- [x] Evaluate opportunity cost
 
 ### Phase 7 — AI
 

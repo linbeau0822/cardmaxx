@@ -4,6 +4,7 @@ import { usePlaidLink, type PlaidLinkOnExit, type PlaidLinkOnSuccess } from 'rea
 import { ApiStatus } from './components/ApiStatus'
 import { CardsPanel } from './components/CardsPanel'
 import { Panel } from './components/Panel'
+import { PortfolioPanel } from './components/PortfolioPanel'
 import { RecommendationsPanel } from './components/RecommendationsPanel'
 import { SpendingOverview } from './components/SpendingOverview'
 import { TransactionsSidebar } from './components/TransactionsSidebar'
@@ -135,6 +136,7 @@ export default function App() {
               <SpendingOverview refreshKey={transactionsVersion} />
               <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
               <RecommendationsPanel refreshKey={accountsVersion} />
+              <PortfolioPanel refreshKey={accountsVersion} />
             </div>
 
             <TransactionsSidebar refreshKey={transactionsVersion} />
