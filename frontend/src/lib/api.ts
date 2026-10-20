@@ -164,6 +164,31 @@ export interface CardsResponse {
   cards: Card[]
 }
 
+export interface CategoryWin {
+  category_name: string
+  previous_rate_bps: number
+  new_rate_bps: number
+}
+
+/** The catalogue card a recommendation is about - no reward_categories, unlike Card: the recommendations endpoint reports rates only for the categories it actually won (see CategoryWin). */
+export interface RecommendedCard {
+  id: string
+  name: string
+  issuer: string
+  annual_fee_cents: number
+  base_reward_rate_bps: number
+}
+
+export interface CardRecommendation {
+  card: RecommendedCard
+  incremental_value_cents: number
+  categories_won: CategoryWin[]
+}
+
+export interface RecommendationsResponse {
+  recommendations: CardRecommendation[]
+}
+
 export const api = {
   /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
@@ -206,4 +231,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ credit_card_id: creditCardId }),
     }),
+
+  /**
+   * Ranks catalogue cards the user doesn't already hold by the incremental
+   * annual value each would add on top of their current cards.
+   */
+  recommendations: () => request<RecommendationsResponse>('/api/v1/recommendations'),
 }

@@ -45,16 +45,6 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// notImplemented builds a handler for a route whose contract exists but whose
-// implementation lands in a later phase. Returning 501 keeps the API honest: a
-// caller can tell "not built yet" apart from "built and returned no data".
-func notImplemented(phase string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeError(w, http.StatusNotImplemented, CodeNotImplemented,
-			"this endpoint is not implemented yet; planned for "+phase)
-	}
-}
-
 // handleCreateLinkToken requests a Plaid Link token for the current user.
 func (s *Server) handleCreateLinkToken(w http.ResponseWriter, r *http.Request) {
 	token, err := s.plaid.CreateLinkToken(r.Context(), s.currentUserID)
@@ -285,6 +275,19 @@ func (s *Server) handleCardValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
+}
+
+// handleRecommendations ranks catalogue cards the current user doesn't
+// already hold by the incremental annual value each would add on top of
+// their current cards.
+func (s *Server) handleRecommendations(w http.ResponseWriter, r *http.Request) {
+	recommendations, err := s.plaid.RecommendCards(r.Context(), s.currentUserID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "recommend cards failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to compute recommendations")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"recommendations": recommendations})
 }
 
 // topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard

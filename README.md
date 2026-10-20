@@ -26,7 +26,7 @@ demo. Specifically, it is a vehicle for:
 
 ## Current Status
 
-**Phases 1-4 are done**, backend and frontend. The dashboard connects real
+**Phases 1-5 are done**, backend and frontend. The dashboard connects real
 accounts via Plaid Link, syncs transactions, and shows spending analysis and
 the user's matched cards.
 
@@ -41,13 +41,15 @@ What works today:
 - React + TypeScript dashboard that talks to the Go API
 - Docker Compose for PostgreSQL, a Makefile for every common task, and CI
 
-Every endpoint not yet reached by its phase returns an explicit
-`501 Not Implemented`, so a caller can always tell "not built yet" apart from
-"built and returned nothing". There is still no authentication (by design,
-until Phase 8) and no AI yet. The reward/annual-value math (`internal/reward`)
-is now wired to a user's own accounts via `PATCH /api/v1/accounts/{id}` and
-`GET /api/v1/cards/{id}/value` - that was Phase 4c; card recommendations are
-Phase 5.
+There is still no authentication (by design, until Phase 8) and no AI yet.
+The reward/annual-value math (`internal/reward`) is wired to a user's own
+accounts via `PATCH /api/v1/accounts/{id}` and `GET /api/v1/cards/{id}/value`
+(Phase 4c). `GET /api/v1/recommendations` (Phase 5) builds on that: it ranks
+catalogue cards the user doesn't hold by the incremental annual value each
+would add on top of their current cards - what the card would capture in
+spend categories where it beats what they already have, net of its annual
+fee, not its value in isolation. Portfolio optimization across combinations
+of cards is Phase 6.
 
 The frontend opens the real Plaid Link widget via `react-plaid-link` from the
 "Connect Account" button, and POSTs its `public_token` to `/exchange-token`
@@ -67,8 +69,7 @@ Cards" panel offers a manual picker for whatever's left unmatched, backed by
 | Credit-card catalog and reward rules | Done — phase 4a |
 | Reward calculation and annual value | Done — phase 4b |
 | Account-to-card linking and per-card value | Done — phase 4c |
-| Current-wallet analysis | Planned — phase 5 |
-| Card recommendations | Planned — phase 5 |
+| Current-wallet analysis and card recommendations | Done — phase 5 |
 | Portfolio optimization | Planned — phase 6 |
 | AI-generated explanations | Planned — phase 7 |
 
@@ -417,13 +418,29 @@ GET /api/v1/cards/{id}/value  →  200 OK
 { "rewards_earned_cents": 48600, "annual_fee_cents": 9500, "annual_value_cents": 39100 }
 ```
 
-### Planned
+#### `GET /api/v1/recommendations`
 
-Every route below is registered and currently returns `501 Not Implemented`.
+Catalogue cards the current user doesn't already hold, ranked by the
+incremental annual value each would add on top of their current cards:
+what it captures in trailing-12-month spend categories where it beats what
+they already have, net of its annual fee. `categories_won` lists which
+categories drove that, and the rate each would replace.
 
-| Endpoint | Purpose | Phase |
-| --- | --- | --- |
-| `GET /api/v1/recommendations` | Card recommendations | 5 |
+```http
+GET /api/v1/recommendations  →  200 OK
+
+{
+  "recommendations": [
+    {
+      "card": { "id": "...", "name": "Costco Anywhere Visa", "issuer": "Citi", "annual_fee_cents": 0, "base_reward_rate_bps": 100 },
+      "incremental_value_cents": 3838,
+      "categories_won": [
+        { "category_name": "TRANSPORTATION", "previous_rate_bps": 150, "new_rate_bps": 400 }
+      ]
+    }
+  ]
+}
+```
 
 ### Errors
 
@@ -432,8 +449,8 @@ Every error uses one envelope, with a stable machine-readable `code`:
 ```json
 {
   "error": {
-    "code": "not_implemented",
-    "message": "this endpoint is not implemented yet; planned for phase 4 (credit-card catalog)"
+    "code": "not_found",
+    "message": "no card with that id"
   }
 }
 ```
@@ -503,10 +520,10 @@ Two conventions matter:
 
 ### Phase 5 — Recommendations
 
-- [ ] Analyze current wallet
-- [ ] Recommend individual cards
-- [ ] Calculate incremental value
-- [ ] Explain recommendation logic
+- [x] Analyze current wallet
+- [x] Recommend individual cards
+- [x] Calculate incremental value
+- [x] Explain recommendation logic
 
 ### Phase 6 — Portfolio Optimization
 

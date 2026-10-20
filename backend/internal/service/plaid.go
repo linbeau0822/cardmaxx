@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -360,28 +361,149 @@ func (s *PlaidService) ValueForCard(ctx context.Context, userID, cardID uuid.UUI
 	if err != nil {
 		return CardValue{}, fmt.Errorf("get credit card: %w", err)
 	}
-	rewardRows, err := s.queries.ListCardRewardCategories(ctx, cardID)
+	profile, err := s.cardProfile(ctx, card)
 	if err != nil {
-		return CardValue{}, fmt.Errorf("list reward categories: %w", err)
+		return CardValue{}, err
 	}
-	spendRows, err := s.queries.GetTrailingYearCategorySpend(ctx, userID)
+	spend, err := s.trailingYearSpend(ctx, userID)
 	if err != nil {
-		return CardValue{}, fmt.Errorf("get trailing year category spend: %w", err)
+		return CardValue{}, err
 	}
 
-	rules := make([]reward.CategoryRule, len(rewardRows))
-	for i, rc := range rewardRows {
-		rules[i] = reward.CategoryRule{CategoryName: rc.CategoryName, RateBps: rc.RewardRateBps, CapCents: rc.RewardCapCents}
-	}
-	spend := make([]reward.CategorySpend, len(spendRows))
-	for i, sp := range spendRows {
-		spend[i] = reward.CategorySpend{CategoryName: sp.CategoryName, TotalCents: sp.TotalCents}
-	}
-
-	earnedCents := reward.CalculateRewards(card.BaseRewardRateBps, rules, spend)
+	earnedCents := reward.CalculateRewards(profile.BaseRateBps, profile.Rules, spend)
 	return CardValue{
 		RewardsEarnedCents: earnedCents,
 		AnnualFeeCents:     card.AnnualFeeCents,
 		AnnualValueCents:   reward.AnnualValueCents(earnedCents, card.AnnualFeeCents),
 	}, nil
+}
+
+// cardProfile loads a catalogue card's reward rules as a reward.CardProfile,
+// keyed by its UUID string so reward.PortfolioRewards can report which card
+// won a category without the reward package importing uuid itself.
+func (s *PlaidService) cardProfile(ctx context.Context, card db.CreditCard) (reward.CardProfile, error) {
+	rewardRows, err := s.queries.ListCardRewardCategories(ctx, card.ID)
+	if err != nil {
+		return reward.CardProfile{}, fmt.Errorf("list reward categories for card %s: %w", card.ID, err)
+	}
+	rules := make([]reward.CategoryRule, len(rewardRows))
+	for i, rc := range rewardRows {
+		rules[i] = reward.CategoryRule{CategoryName: rc.CategoryName, RateBps: rc.RewardRateBps, CapCents: rc.RewardCapCents}
+	}
+	return reward.CardProfile{ID: card.ID.String(), BaseRateBps: card.BaseRewardRateBps, Rules: rules}, nil
+}
+
+// trailingYearSpend loads the user's trailing-12-month reward-eligible
+// spend by category, in the shape the reward package consumes.
+func (s *PlaidService) trailingYearSpend(ctx context.Context, userID uuid.UUID) ([]reward.CategorySpend, error) {
+	spendRows, err := s.queries.GetTrailingYearCategorySpend(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get trailing year category spend: %w", err)
+	}
+	spend := make([]reward.CategorySpend, len(spendRows))
+	for i, sp := range spendRows {
+		spend[i] = reward.CategorySpend{CategoryName: sp.CategoryName, TotalCents: sp.TotalCents}
+	}
+	return spend, nil
+}
+
+// CardRecommendation is a catalogue card the user doesn't hold, ranked by
+// the extra reward value it would add on top of the cards they already
+// have - not its value in isolation (ValueForCard already answers that).
+// Phase 5 only ever adds one card to the user's current set; evaluating
+// whole-portfolio combinations is Phase 6.
+type CardRecommendation struct {
+	Card                  db.CreditCard `json:"card"`
+	IncrementalValueCents int64         `json:"incremental_value_cents"`
+	CategoriesWon         []CategoryWin `json:"categories_won"`
+}
+
+// CategoryWin is one spend category a recommended card would capture from
+// whatever rate the user's current cards earn on it today.
+type CategoryWin struct {
+	CategoryName    string `json:"category_name"`
+	PreviousRateBps int32  `json:"previous_rate_bps"`
+	NewRateBps      int32  `json:"new_rate_bps"`
+}
+
+// RecommendCards ranks catalogue cards the user doesn't already hold by the
+// incremental annual value each would add: what it captures from the
+// user's trailing-12-month spend in categories where it beats their
+// current cards, net of its annual fee.
+func (s *PlaidService) RecommendCards(ctx context.Context, userID uuid.UUID) ([]CardRecommendation, error) {
+	accounts, err := s.queries.ListAccountsByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
+	held := make(map[uuid.UUID]bool, len(accounts))
+	for _, a := range accounts {
+		if a.CreditCardID != nil {
+			held[*a.CreditCardID] = true
+		}
+	}
+
+	catalog, err := s.queries.ListCreditCards(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list credit cards: %w", err)
+	}
+	spend, err := s.trailingYearSpend(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var currentProfiles []reward.CardProfile
+	for _, card := range catalog {
+		if !held[card.ID] {
+			continue
+		}
+		profile, err := s.cardProfile(ctx, card)
+		if err != nil {
+			return nil, err
+		}
+		currentProfiles = append(currentProfiles, profile)
+	}
+	currentTotalCents, currentWinners := reward.PortfolioRewards(currentProfiles, spend)
+
+	var recommendations []CardRecommendation
+	for _, card := range catalog {
+		if held[card.ID] {
+			continue
+		}
+		// ponytail: one ListCardRewardCategories query per candidate card
+		// via cardProfile - fine at today's catalog size; batch into one
+		// query keyed by card ID if a larger catalog makes this slow.
+		profile, err := s.cardProfile(ctx, card)
+		if err != nil {
+			return nil, err
+		}
+
+		candidates := make([]reward.CardProfile, len(currentProfiles)+1)
+		copy(candidates, currentProfiles)
+		candidates[len(currentProfiles)] = profile
+		withCandidateCents, winners := reward.PortfolioRewards(candidates, spend)
+
+		var won []CategoryWin
+		for category, winner := range winners {
+			if winner.CardID != profile.ID {
+				continue
+			}
+			previousRateBps := int32(0)
+			if prev, ok := currentWinners[category]; ok {
+				previousRateBps = prev.RateBps
+			}
+			won = append(won, CategoryWin{CategoryName: category, PreviousRateBps: previousRateBps, NewRateBps: winner.RateBps})
+		}
+		sort.Slice(won, func(i, j int) bool { return won[i].CategoryName < won[j].CategoryName })
+
+		recommendations = append(recommendations, CardRecommendation{
+			Card:                  card,
+			IncrementalValueCents: withCandidateCents - currentTotalCents - int64(card.AnnualFeeCents),
+			CategoriesWon:         won,
+		})
+	}
+
+	sort.Slice(recommendations, func(i, j int) bool {
+		return recommendations[i].IncrementalValueCents > recommendations[j].IncrementalValueCents
+	})
+	return recommendations, nil
 }

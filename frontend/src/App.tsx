@@ -3,7 +3,8 @@ import { usePlaidLink, type PlaidLinkOnExit, type PlaidLinkOnSuccess } from 'rea
 
 import { ApiStatus } from './components/ApiStatus'
 import { CardsPanel } from './components/CardsPanel'
-import { ComingSoon, Panel } from './components/Panel'
+import { Panel } from './components/Panel'
+import { RecommendationsPanel } from './components/RecommendationsPanel'
 import { SpendingOverview } from './components/SpendingOverview'
 import { TransactionsSidebar } from './components/TransactionsSidebar'
 import { ApiError, type Account, api } from './lib/api'
@@ -133,12 +134,7 @@ export default function App() {
             <div className="min-w-0 flex-1 grid gap-4">
               <SpendingOverview refreshKey={transactionsVersion} />
               <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
-              <Panel
-                title="Recommendations"
-                subtitle="Cards that would have earned you more on the spending you already do."
-              >
-                <ComingSoon phase="phase 5" />
-              </Panel>
+              <RecommendationsPanel refreshKey={accountsVersion} />
             </div>
 
             <TransactionsSidebar refreshKey={transactionsVersion} />

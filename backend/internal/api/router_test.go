@@ -23,12 +23,13 @@ import (
 // fakeQuerier is an in-memory stand-in for service.Querier, so these tests
 // exercise the HTTP layer without a database.
 type fakeQuerier struct {
-	accounts      []db.Account
-	transactions  []db.Transaction
-	plaidItems    []db.PlaidItem
-	cards         []db.CreditCard
-	categorySpend []db.GetTrailingYearCategorySpendRow
-	linkCardErr   error
+	accounts         []db.Account
+	transactions     []db.Transaction
+	plaidItems       []db.PlaidItem
+	cards            []db.CreditCard
+	rewardCategories map[uuid.UUID][]db.ListCardRewardCategoriesRow
+	categorySpend    []db.GetTrailingYearCategorySpendRow
+	linkCardErr      error
 }
 
 func (f *fakeQuerier) CreatePlaidItem(_ context.Context, arg db.CreatePlaidItemParams) (db.PlaidItem, error) {
@@ -94,8 +95,8 @@ func (f *fakeQuerier) GetCreditCard(_ context.Context, id uuid.UUID) (db.CreditC
 	}
 	return db.CreditCard{}, pgx.ErrNoRows
 }
-func (f *fakeQuerier) ListCardRewardCategories(_ context.Context, _ uuid.UUID) ([]db.ListCardRewardCategoriesRow, error) {
-	return nil, nil
+func (f *fakeQuerier) ListCardRewardCategories(_ context.Context, cardID uuid.UUID) ([]db.ListCardRewardCategoriesRow, error) {
+	return f.rewardCategories[cardID], nil
 }
 func (f *fakeQuerier) GetTrailingYearCategorySpend(_ context.Context, _ uuid.UUID) ([]db.GetTrailingYearCategorySpendRow, error) {
 	return f.categorySpend, nil
@@ -172,35 +173,6 @@ func TestHealth(t *testing.T) {
 	}
 	if body["status"] != "ok" {
 		t.Errorf(`body = %v, want {"status":"ok"}`, body)
-	}
-}
-
-func TestUnimplementedEndpointsReturn501(t *testing.T) {
-	routes := []struct {
-		method, path string
-	}{
-		{http.MethodGet, "/api/v1/recommendations"},
-	}
-
-	for _, route := range routes {
-		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			rec := do(t, route.method, route.path, nil)
-
-			if rec.Code != http.StatusNotImplemented {
-				t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotImplemented)
-			}
-
-			var body errorResponse
-			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-				t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
-			}
-			if body.Error.Code != CodeNotImplemented {
-				t.Errorf("error.code = %q, want %q", body.Error.Code, CodeNotImplemented)
-			}
-			if body.Error.Message == "" {
-				t.Error("error.message is empty, want an explanation of what is missing")
-			}
-		})
 	}
 }
 
@@ -384,6 +356,60 @@ func TestCardValueNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestRecommendations(t *testing.T) {
+	heldCard := db.CreditCard{ID: uuid.New(), Name: "Flat 1%", BaseRewardRateBps: 100}
+	diningCard := db.CreditCard{ID: uuid.New(), Name: "Dining 4%", AnnualFeeCents: 9500}
+	q := &fakeQuerier{
+		cards:    []db.CreditCard{heldCard, diningCard},
+		accounts: []db.Account{{ID: uuid.New(), CreditCardID: &heldCard.ID}},
+		rewardCategories: map[uuid.UUID][]db.ListCardRewardCategoriesRow{
+			diningCard.ID: {{CategoryName: "FOOD_AND_DRINK", RewardRateBps: 400}},
+		},
+		categorySpend: []db.GetTrailingYearCategorySpendRow{{CategoryName: "FOOD_AND_DRINK", TotalCents: 1_000_000}},
+	}
+	handler := newTestRouterWith(q, &fakePlaidClient{})
+
+	rec := doOn(t, handler, http.MethodGet, "/api/v1/recommendations", nil, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body struct {
+		Recommendations []struct {
+			Card                  db.CreditCard `json:"card"`
+			IncrementalValueCents int64         `json:"incremental_value_cents"`
+			CategoriesWon         []struct {
+				CategoryName    string `json:"category_name"`
+				PreviousRateBps int32  `json:"previous_rate_bps"`
+				NewRateBps      int32  `json:"new_rate_bps"`
+			} `json:"categories_won"`
+		} `json:"recommendations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+
+	if len(body.Recommendations) != 1 {
+		t.Fatalf("got %d recommendations, want 1 (the held card must be excluded)", len(body.Recommendations))
+	}
+	got := body.Recommendations[0]
+	if got.Card.ID != diningCard.ID {
+		t.Errorf("recommended card = %s, want %s", got.Card.ID, diningCard.ID)
+	}
+	// Dining earns 4% of $10,000 = $400 instead of the held card's 1% ($100),
+	// a $300 gain, minus the $95 annual fee = $205.
+	wantCents := int64(400_00 - 100_00 - 95_00)
+	if got.IncrementalValueCents != wantCents {
+		t.Errorf("incremental_value_cents = %d, want %d", got.IncrementalValueCents, wantCents)
+	}
+	if len(got.CategoriesWon) != 1 || got.CategoriesWon[0].CategoryName != "FOOD_AND_DRINK" {
+		t.Fatalf("categories_won = %v, want [FOOD_AND_DRINK]", got.CategoriesWon)
+	}
+	if got.CategoriesWon[0].PreviousRateBps != 100 || got.CategoriesWon[0].NewRateBps != 400 {
+		t.Errorf("categories_won[0] rates = %d -> %d, want 100 -> 400", got.CategoriesWon[0].PreviousRateBps, got.CategoriesWon[0].NewRateBps)
 	}
 }
 

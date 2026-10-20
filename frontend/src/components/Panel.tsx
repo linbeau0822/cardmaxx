@@ -17,12 +17,3 @@ export function Panel({ title, subtitle, children }: PanelProps) {
     </section>
   )
 }
-
-/** Placeholder for a panel whose backend phase has not landed yet. */
-export function ComingSoon({ phase }: { phase: string }) {
-  return (
-    <p className="text-sm text-ink-muted">
-      Coming soon <span className="text-ink-muted/60">· {phase}</span>
-    </p>
-  )
-}
