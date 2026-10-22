@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/linbeau0822/cardmaxx/backend/internal/ai"
 	"github.com/linbeau0822/cardmaxx/backend/internal/database/db"
 	"github.com/linbeau0822/cardmaxx/backend/internal/plaid"
 	"github.com/linbeau0822/cardmaxx/backend/internal/service"
@@ -30,6 +32,7 @@ const foreignKeyViolation = "23503"
 // handler scopes its queries to this id.
 type Server struct {
 	plaid         *service.PlaidService
+	ai            *service.AIService // nil if OPENAI_API_KEY isn't configured
 	currentUserID uuid.UUID
 	logger        *slog.Logger
 }
@@ -301,6 +304,53 @@ func (s *Server) handleOptimizePortfolio(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"options": options})
+}
+
+type aiAskRequest struct {
+	Question string `json:"question"`
+}
+
+// handleAIAsk answers a free-text question about the current user's
+// spending, card values, recommendations, or portfolio options (Phase 7),
+// grounded in the numbers the other handlers above already compute.
+func (s *Server) handleAIAsk(w http.ResponseWriter, r *http.Request) {
+	if s.ai == nil {
+		writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "AI assistant is not configured (set OPENAI_API_KEY)")
+		return
+	}
+
+	var req aiAskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "request body must be JSON with a question field")
+		return
+	}
+	req.Question = strings.TrimSpace(req.Question)
+	if req.Question == "" {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "question is required")
+		return
+	}
+
+	answer, err := s.ai.Ask(r.Context(), s.currentUserID, req.Question)
+	if err != nil {
+		s.writeAIError(w, r, "answer question", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"answer": answer})
+}
+
+// writeAIError reports a failed OpenAI call. An ai.APIError carries a
+// message safe to surface (OpenAI's own documented error messages); anything
+// else is an internal failure whose detail stays in the logs.
+func (s *Server) writeAIError(w http.ResponseWriter, r *http.Request, action string, err error) {
+	var apiErr *ai.APIError
+	if errors.As(err, &apiErr) {
+		s.logger.WarnContext(r.Context(), "openai rejected request",
+			slog.String("action", action), slog.Any("error", apiErr))
+		writeError(w, http.StatusBadGateway, CodeInternal, "openai: "+apiErr.Message)
+		return
+	}
+	s.logger.ErrorContext(r.Context(), action+" failed", slog.Any("error", err))
+	writeError(w, http.StatusInternalServerError, CodeInternal, "failed to "+action)
 }
 
 // topMerchantsLimit caps the merchant ranking to a top-N list; the dashboard

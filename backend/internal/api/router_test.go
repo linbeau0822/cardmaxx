@@ -134,7 +134,7 @@ func newTestRouterWith(q service.Querier, p service.PlaidClient) http.Handler {
 	cfg := config.ServerConfig{AllowedOrigins: []string{"http://localhost:5173"}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := service.NewPlaidService(q, p)
-	return NewRouter(cfg, logger, svc, uuid.New())
+	return NewRouter(cfg, logger, svc, nil, uuid.New())
 }
 
 func do(t *testing.T, method, target string, headers map[string]string) *httptest.ResponseRecorder {

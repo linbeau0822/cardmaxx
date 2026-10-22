@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | 'not_implemented'
   | 'bad_request'
   | 'internal_error'
+  | 'service_unavailable'
   | 'network_error'
 
 /** Shape of the backend's error responses: `{ "error": { "code", "message" } }`. */
@@ -202,6 +203,10 @@ export interface PortfolioOptionsResponse {
   options: PortfolioOption[]
 }
 
+export interface AskAIResponse {
+  answer: string
+}
+
 export const api = {
   /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
@@ -256,4 +261,17 @@ export const api = {
    * catalogue cards that earns the most net annual value.
    */
   optimizePortfolio: () => request<PortfolioOptionsResponse>('/api/v1/recommendations/portfolio'),
+
+  /**
+   * Answers a free-text question about the user's spending, recommendations,
+   * or portfolio options, grounded in the same numbers those endpoints
+   * return. Returns a 'service_unavailable' ApiError if no OPENAI_API_KEY
+   * is configured on the backend.
+   */
+  askAI: (question: string) =>
+    request<AskAIResponse>('/api/v1/ai/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    }),
 }

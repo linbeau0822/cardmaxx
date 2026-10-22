@@ -27,7 +27,16 @@ const (
 type Config struct {
 	DatabaseURL string
 	Plaid       PlaidConfig
+	OpenAI      OpenAIConfig
 	Server      ServerConfig
+}
+
+// OpenAIConfig holds the credentials for the Phase 7 AI assistant. Unlike
+// Plaid, this is optional: an empty APIKey disables the /api/v1/ai routes
+// instead of failing start-up, since the rest of CardMaxx works fine without it.
+type OpenAIConfig struct {
+	APIKey string
+	Model  string
 }
 
 // PlaidConfig holds the credentials used to talk to Plaid. These are secrets
@@ -65,6 +74,10 @@ const (
 
 	defaultPort           = 8080
 	defaultAllowedOrigins = "http://localhost:5173"
+
+	// defaultOpenAIModel is a low-cost model, cheap enough to run on the free
+	// trial credit new OpenAI accounts get.
+	defaultOpenAIModel = "gpt-4o-mini"
 )
 
 // Load reads configuration from the environment and validates it.
@@ -80,6 +93,10 @@ func Load() (Config, error) {
 			ClientID: os.Getenv("PLAID_CLIENT_ID"),
 			Secret:   os.Getenv("PLAID_SECRET"),
 			Env:      PlaidEnv(envOr("PLAID_ENV", string(PlaidSandbox))),
+		},
+		OpenAI: OpenAIConfig{
+			APIKey: os.Getenv("OPENAI_API_KEY"),
+			Model:  envOr("OPENAI_MODEL", defaultOpenAIModel),
 		},
 		Server: ServerConfig{
 			AllowedOrigins:    splitAndTrim(envOr("CORS_ALLOWED_ORIGINS", defaultAllowedOrigins)),

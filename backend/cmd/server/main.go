@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/linbeau0822/cardmaxx/backend/internal/ai"
 	"github.com/linbeau0822/cardmaxx/backend/internal/api"
 	"github.com/linbeau0822/cardmaxx/backend/internal/config"
 	"github.com/linbeau0822/cardmaxx/backend/internal/database"
@@ -76,9 +77,19 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	)
 	plaidSvc := service.NewPlaidService(queries, plaidClient)
 
+	// OpenAI is optional: Phase 7's AI endpoints return 503 instead of
+	// failing start-up when no key is configured.
+	var aiSvc *service.AIService
+	if cfg.OpenAI.APIKey == "" {
+		logger.Warn("OPENAI_API_KEY not set; AI assistant endpoints disabled")
+	} else {
+		aiSvc = service.NewAIService(plaidSvc, ai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model))
+		logger.Info("openai client configured", slog.String("model", cfg.OpenAI.Model))
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Server.Addr(),
-		Handler:           api.NewRouter(cfg.Server, logger, plaidSvc, currentUserID),
+		Handler:           api.NewRouter(cfg.Server, logger, plaidSvc, aiSvc, currentUserID),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,

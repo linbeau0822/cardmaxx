@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePlaidLink, type PlaidLinkOnExit, type PlaidLinkOnSuccess } from 'react-plaid-link'
 
 import { ApiStatus } from './components/ApiStatus'
+import { AskAIPanel } from './components/AskAIPanel'
 import { CardsPanel } from './components/CardsPanel'
 import { Panel } from './components/Panel'
 import { PortfolioPanel } from './components/PortfolioPanel'
@@ -137,6 +138,7 @@ export default function App() {
               <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
               <RecommendationsPanel refreshKey={accountsVersion} />
               <PortfolioPanel refreshKey={accountsVersion} />
+              <AskAIPanel />
             </div>
 
             <TransactionsSidebar refreshKey={transactionsVersion} />

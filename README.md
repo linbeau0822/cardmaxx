@@ -26,9 +26,10 @@ demo. Specifically, it is a vehicle for:
 
 ## Current Status
 
-**Phases 1-6 are done**, backend and frontend. The dashboard connects real
+**Phases 1-7 are done**, backend and frontend. The dashboard connects real
 accounts via Plaid Link, syncs transactions, and shows spending analysis, the
-user's matched cards, and portfolio recommendations.
+user's matched cards, portfolio recommendations, and an AI assistant that
+answers questions about them.
 
 What works today:
 
@@ -41,7 +42,15 @@ What works today:
 - React + TypeScript dashboard that talks to the Go API
 - Docker Compose for PostgreSQL, a Makefile for every common task, and CI
 
-There is still no authentication (by design, until Phase 8) and no AI yet.
+There is still no authentication (by design, until Phase 8). `POST
+/api/v1/ai/ask` (Phase 7) answers free-text questions about a user's
+spending, card values, recommendations, and portfolio options: the handler
+gathers those already-computed numbers (the same ones the endpoints above
+return) and hands them to an OpenAI model as context, instructed to explain
+and cite those numbers rather than compute its own - consistent with this
+project's rule that an LLM never produces a dollar figure. The route is
+optional: with no `OPENAI_API_KEY` configured it returns `503
+service_unavailable` and the rest of the app works exactly as before.
 The reward/annual-value math (`internal/reward`) is wired to a user's own
 accounts via `PATCH /api/v1/accounts/{id}` and `GET /api/v1/cards/{id}/value`
 (Phase 4c). `GET /api/v1/recommendations` (Phase 5) builds on that: it ranks
@@ -79,7 +88,7 @@ Cards" panel offers a manual picker for whatever's left unmatched, backed by
 | Account-to-card linking and per-card value | Done — phase 4c |
 | Current-wallet analysis and card recommendations | Done — phase 5 |
 | Portfolio optimization | Done — phase 6 |
-| AI-generated explanations | Planned — phase 7 |
+| AI-generated explanations | Done — phase 7 |
 
 ## Architecture
 
@@ -569,9 +578,17 @@ Two conventions matter:
 
 ### Phase 7 — AI
 
-- [ ] Generate recommendation explanations
-- [ ] Natural-language spending questions
-- [ ] Explain calculation results
+- [x] Generate recommendation explanations
+- [x] Natural-language spending questions
+- [x] Explain calculation results
+
+One endpoint, `POST /api/v1/ai/ask` (body: `{"question": "..."}`, response:
+`{"answer": "..."}`), covers all three: the context handed to the model
+includes spending by month/category, top merchants, card recommendations and
+portfolio options, so the question's own wording decides which of those it's
+asking about. Requires `OPENAI_API_KEY`; see `internal/ai` (the OpenAI HTTP
+client) and `internal/service/ai.go` (context gathering and the system
+prompt that keeps the model explaining rather than calculating).
 
 ### Phase 8 — Production
 

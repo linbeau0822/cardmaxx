@@ -24,8 +24,10 @@ const requestTimeout = 25 * time.Second
 //
 // currentUserID stands in for authentication (Phase 8): every Phase 2 route
 // acts on this one implicit user.
-func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.PlaidService, currentUserID uuid.UUID) http.Handler {
-	srv := &Server{plaid: plaidSvc, currentUserID: currentUserID, logger: logger}
+// aiSvc is nil when OPENAI_API_KEY isn't configured; handleAIAsk reports
+// that as a 503 instead of the router omitting the route.
+func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.PlaidService, aiSvc *service.AIService, currentUserID uuid.UUID) http.Handler {
+	srv := &Server{plaid: plaidSvc, ai: aiSvc, currentUserID: currentUserID, logger: logger}
 	r := chi.NewRouter()
 
 	// Order matters: RequestID must run before the logger so every line is
@@ -64,6 +66,8 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.P
 		r.Get("/analysis/spending", srv.handleSpendingAnalysis)
 		r.Get("/recommendations", srv.handleRecommendations)
 		r.Get("/recommendations/portfolio", srv.handleOptimizePortfolio)
+
+		r.Post("/ai/ask", srv.handleAIAsk)
 	})
 
 	return r
