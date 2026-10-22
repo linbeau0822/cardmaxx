@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, type CardRecommendation } from '../lib/api'
+import { IssuerLogo } from './IssuerLogo'
 import { Panel } from './Panel'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -51,7 +52,8 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
       {recommendations.map((r) => (
         <li key={r.card.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-medium text-ink">
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <IssuerLogo issuer={r.card.issuer} network={r.card.network} />
               {r.card.issuer} {r.card.name}
             </span>
             <span className={`flex-none text-sm font-medium ${r.incremental_value_cents >= 0 ? 'text-accent' : 'text-ink-muted'}`}>

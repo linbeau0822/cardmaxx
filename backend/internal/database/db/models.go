@@ -47,6 +47,7 @@ type CreditCard struct {
 	BaseRewardRateBps int32     `json:"base_reward_rate_bps"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
+	Network           string    `json:"network"`
 }
 
 type PlaidItem struct {
