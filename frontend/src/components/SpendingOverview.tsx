@@ -50,7 +50,7 @@ function CategoryBarChart({ categories }: { categories: CategorySpending[] }) {
               {!isNegative && (
                 <>
                   <span
-                    className="mb-1 text-[10px] tabular-nums text-ink-muted"
+                    className="mb-1 font-display text-xs tabular-nums text-ink-muted"
                     style={{ opacity: isZero ? 0 : 1, transition: FLOW_TRANSITION }}
                   >
                     {currency.format(c.total_cents / 100)}
@@ -72,7 +72,7 @@ function CategoryBarChart({ categories }: { categories: CategorySpending[] }) {
                       style={{ height: barHeight, transition: FLOW_TRANSITION }}
                     />
                     <span
-                      className="mt-1 text-[10px] tabular-nums text-ink-muted"
+                      className="mt-1 font-display text-xs tabular-nums text-ink-muted"
                       style={{ opacity: isZero ? 0 : 1, transition: FLOW_TRANSITION }}
                     >
                       {currency.format(c.total_cents / 100)}

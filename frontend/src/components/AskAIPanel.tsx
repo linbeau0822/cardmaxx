@@ -70,7 +70,7 @@ export function AskAIPanel() {
         <button
           type="submit"
           disabled={pending || !question.trim()}
-          className="flex-none rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
+          className="flex-none rounded-lg bg-accent px-4 py-2 font-display text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
         >
           {pending ? 'Asking…' : 'Ask'}
         </button>

@@ -56,7 +56,7 @@ export function PortfolioPanel({ refreshKey }: { refreshKey: number }) {
   ) : (
     <ul className="divide-y divide-white/5">
       {options.map((o, i) => (
-        <li key={o.cards.map((c) => c.id).join(',')} className="py-3">
+        <li key={o.cards.map((c) => c.id).join(',')} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-medium text-ink">
               {o.cards.length} card{o.cards.length > 1 ? 's' : ''}

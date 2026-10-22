@@ -68,7 +68,7 @@ export function CardsPanel({ accounts, onLinked }: { accounts: Account[]; onLink
   ) : (
     <ul className="divide-y divide-white/5">
       {cards.map((c) => (
-        <li key={c.id} className="py-3">
+        <li key={c.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-medium text-ink">{c.name}</span>
             <span className="flex-none text-xs text-ink-muted">
