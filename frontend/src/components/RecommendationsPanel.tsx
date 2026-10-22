@@ -49,7 +49,7 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
   ) : (
     <ul className="divide-y divide-white/5">
       {recommendations.map((r) => (
-        <li key={r.card.id} className="py-3">
+        <li key={r.card.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-medium text-ink">
               {r.card.issuer} {r.card.name}

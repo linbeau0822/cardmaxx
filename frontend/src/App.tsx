@@ -97,15 +97,19 @@ export default function App() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
-      <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">CardMaxx</h1>
-          <p className="mt-1 text-sm text-ink-muted">
+    <main className="mx-auto max-w-6xl px-6 py-16 sm:px-10 md:py-24 lg:px-16">
+      <header className="grid grid-cols-12 items-start gap-6">
+        <div className="col-span-12 lg:col-span-8">
+          <h1 className="font-display text-5xl tracking-tight text-ink sm:text-6xl md:text-7xl leading-[0.95]">
+            CardMaxx
+          </h1>
+          <p className="mt-3 text-sm text-ink-muted">
             Analyze your spending and find the credit cards that pay you more.
           </p>
         </div>
-        <ApiStatus />
+        <div className="col-span-12 lg:col-span-4 lg:text-right">
+          <ApiStatus />
+        </div>
       </header>
 
       <div className="mt-8">
@@ -125,20 +129,24 @@ export default function App() {
       </div>
 
       {accounts !== null && accounts.length === 0 ? (
-        <div className="mt-10">
+        <div className="mt-16">
           <Panel title="No accounts linked" subtitle="Connect an account above to see your spending and card recommendations.">
             <p className="text-sm text-ink-muted">Nothing to show yet.</p>
           </Panel>
         </div>
       ) : (
         accounts !== null && (
-          <div className="mt-10 flex items-start gap-6">
-            <div className="min-w-0 flex-1 grid gap-4">
+          <div className="mt-16 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_22rem] lg:gap-14">
+            <div className="grid min-w-0 gap-16">
               <SpendingOverview refreshKey={transactionsVersion} />
-              <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
-              <RecommendationsPanel refreshKey={accountsVersion} />
+              <div className="grid gap-16 md:grid-cols-2 md:gap-10">
+                <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
+                <RecommendationsPanel refreshKey={accountsVersion} />
+              </div>
               <PortfolioPanel refreshKey={accountsVersion} />
-              <AskAIPanel />
+              <div className="md:ml-16 md:max-w-xl">
+                <AskAIPanel />
+              </div>
             </div>
 
             <TransactionsSidebar refreshKey={transactionsVersion} />
