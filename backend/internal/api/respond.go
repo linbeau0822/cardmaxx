@@ -16,6 +16,7 @@ const (
 	CodeNotImplemented   ErrorCode = "not_implemented"
 	CodeBadRequest       ErrorCode = "bad_request"
 	CodeInternal         ErrorCode = "internal_error"
+	CodeUnavailable      ErrorCode = "service_unavailable"
 )
 
 // errorResponse is the single error envelope used by every endpoint.
