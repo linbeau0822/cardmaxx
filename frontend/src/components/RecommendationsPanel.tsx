@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, type CardRecommendation } from '../lib/api'
+import { IssuerLogo } from './IssuerLogo'
 import { Panel } from './Panel'
 import { useReveal } from '../lib/useReveal'
 
@@ -76,7 +77,8 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
     <p className="mt-4 text-sm text-ink-muted">No card in the catalogue beats what you already have.</p>
   ) : (
     <>
-      <h2 className="mt-3 font-display text-3xl tracking-tight text-ink sm:text-4xl md:text-5xl">
+      <h2 className="mt-3 flex items-center gap-2 font-display text-3xl tracking-tight text-ink sm:text-4xl md:text-5xl">
+        <IssuerLogo issuer={top.card.issuer} network={top.card.network} />
         {top.card.issuer} {top.card.name}
       </h2>
       <p className="mt-4 text-2xl font-medium text-accent sm:text-3xl">
@@ -121,7 +123,8 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
             {rest.map((r) => (
               <li key={r.card.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-ink">
+                  <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                    <IssuerLogo issuer={r.card.issuer} network={r.card.network} />
                     {r.card.issuer} {r.card.name}
                   </span>
                   <span className={`flex-none text-sm font-medium ${r.incremental_value_cents >= 0 ? 'text-accent' : 'text-ink-muted'}`}>

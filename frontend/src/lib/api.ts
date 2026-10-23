@@ -156,6 +156,7 @@ export interface Card {
   id: string
   name: string
   issuer: string
+  network: string
   annual_fee_cents: number
   base_reward_rate_bps: number
   reward_categories: CardRewardCategory[]
@@ -176,6 +177,7 @@ export interface RecommendedCard {
   id: string
   name: string
   issuer: string
+  network: string
   annual_fee_cents: number
   base_reward_rate_bps: number
 }

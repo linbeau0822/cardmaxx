@@ -13,7 +13,7 @@ import (
 )
 
 const getCreditCard = `-- name: GetCreditCard :one
-SELECT id, name, issuer, annual_fee_cents, base_reward_rate_bps, created_at, updated_at FROM credit_cards WHERE id = $1
+SELECT id, name, issuer, annual_fee_cents, base_reward_rate_bps, created_at, updated_at, network FROM credit_cards WHERE id = $1
 `
 
 func (q *Queries) GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, error) {
@@ -27,6 +27,7 @@ func (q *Queries) GetCreditCard(ctx context.Context, id uuid.UUID) (CreditCard, 
 		&i.BaseRewardRateBps,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Network,
 	)
 	return i, err
 }
@@ -83,7 +84,7 @@ func (q *Queries) ListCardRewardCategories(ctx context.Context, creditCardID uui
 }
 
 const listCreditCards = `-- name: ListCreditCards :many
-SELECT id, name, issuer, annual_fee_cents, base_reward_rate_bps, created_at, updated_at FROM credit_cards ORDER BY issuer, name
+SELECT id, name, issuer, annual_fee_cents, base_reward_rate_bps, created_at, updated_at, network FROM credit_cards ORDER BY issuer, name
 `
 
 // The credit-card catalogue is global reference data, not per-user.
@@ -104,6 +105,7 @@ func (q *Queries) ListCreditCards(ctx context.Context) ([]CreditCard, error) {
 			&i.BaseRewardRateBps,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Network,
 		); err != nil {
 			return nil, err
 		}

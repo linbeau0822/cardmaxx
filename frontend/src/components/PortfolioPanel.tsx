@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError, api, type PortfolioOption } from '../lib/api'
+import { ApiError, api, type PortfolioOption, type RecommendedCard } from '../lib/api'
+import { IssuerLogo } from './IssuerLogo'
 import { Panel } from './Panel'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
-/** Names a portfolio option by what it adds over the previous size's cards. */
-function describeAddition(option: PortfolioOption, previous: PortfolioOption | undefined): string {
+/** Names the cards a portfolio option adds over the previous size's cards. */
+function addedCards(option: PortfolioOption, previous: PortfolioOption | undefined): RecommendedCard[] {
   const previousIds = new Set(previous?.cards.map((c) => c.id) ?? [])
-  const added = option.cards.filter((c) => !previousIds.has(c.id))
-  if (!previous || added.length === option.cards.length) {
-    return added.map((c) => `${c.issuer} ${c.name}`).join(', ')
-  }
-  return `+ ${added.map((c) => `${c.issuer} ${c.name}`).join(', ')}`
+  return option.cards.filter((c) => !previousIds.has(c.id))
 }
 
 /**
@@ -64,7 +61,16 @@ export function PortfolioPanel({ refreshKey }: { refreshKey: number }) {
             </span>
             <span className="flex-none text-sm font-medium text-ink">{currency.format(o.net_value_cents / 100)}/yr net</span>
           </div>
-          <p className="mt-0.5 text-xs text-ink-muted">{describeAddition(o, options[i - 1])}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-muted">
+            {i > 0 && '+ '}
+            {addedCards(o, options[i - 1]).map((c, j) => (
+              <span key={c.id} className="inline-flex items-center gap-1">
+                {j > 0 && ', '}
+                <IssuerLogo issuer={c.issuer} network={c.network} />
+                {c.issuer} {c.name}
+              </span>
+            ))}
+          </p>
           {i > 0 && (
             <p className={`mt-0.5 text-xs ${o.marginal_value_cents < 0 ? 'text-ink-muted' : 'text-accent'}`}>
               {o.marginal_value_cents >= 0 ? '+' : ''}

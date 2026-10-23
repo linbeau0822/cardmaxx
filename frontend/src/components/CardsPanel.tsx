@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, type Account, type Card } from '../lib/api'
+import { IssuerLogo } from './IssuerLogo'
 import { Panel } from './Panel'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -78,7 +79,10 @@ export function CardsPanel({
       {cards.map((c) => (
         <li key={c.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-medium text-ink">{c.name}</span>
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <IssuerLogo issuer={c.issuer} network={c.network} />
+              {c.name}
+            </span>
             <span className="flex-none text-xs text-ink-muted">
               {c.annual_fee_cents === 0 ? 'No annual fee' : `${currency.format(c.annual_fee_cents / 100)}/yr`}
             </span>
