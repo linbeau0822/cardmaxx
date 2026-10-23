@@ -68,6 +68,7 @@ func NewRouter(cfg config.ServerConfig, logger *slog.Logger, plaidSvc *service.P
 		r.Get("/recommendations/portfolio", srv.handleOptimizePortfolio)
 
 		r.Post("/ai/ask", srv.handleAIAsk)
+		r.Post("/ai/explain-recommendation", srv.handleExplainRecommendation)
 	})
 
 	return r

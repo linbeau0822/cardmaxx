@@ -207,6 +207,10 @@ export interface AskAIResponse {
   answer: string
 }
 
+export interface ExplainRecommendationResponse {
+  explanation: string
+}
+
 export const api = {
   /** Liveness check. */
   health: () => request<HealthResponse>('/health'),
@@ -273,5 +277,17 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
+    }),
+
+  /**
+   * Asks the AI assistant to explain, in a sentence or two, why one
+   * specific recommended card is a good next card. Returns a
+   * 'service_unavailable' ApiError if no OPENAI_API_KEY is configured.
+   */
+  explainRecommendation: (cardId: string) =>
+    request<ExplainRecommendationResponse>('/api/v1/ai/explain-recommendation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_id: cardId }),
     }),
 }
