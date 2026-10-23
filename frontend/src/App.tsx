@@ -100,7 +100,8 @@ export default function App() {
     <main className="mx-auto max-w-6xl px-6 py-16 sm:px-10 md:py-24 lg:px-16">
       <header className="grid grid-cols-12 items-start gap-6">
         <div className="col-span-12 lg:col-span-8">
-          <h1 className="font-display text-5xl tracking-tight text-ink sm:text-6xl md:text-7xl leading-[0.95]">
+          <h1 className="flex items-center gap-3 font-display text-5xl tracking-tight text-ink sm:text-6xl md:text-7xl leading-[0.95]">
+            <img src="/favicon.svg" alt="" className="h-10 w-10 sm:h-12 sm:w-12" />
             CardMaxx
           </h1>
           <p className="mt-3 text-sm text-ink-muted">
