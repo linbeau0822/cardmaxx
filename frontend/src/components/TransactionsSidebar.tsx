@@ -39,7 +39,7 @@ export function TransactionsSidebar({ refreshKey }: { refreshKey: number }) {
         revealed ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
       }`}
     >
-      <h2 className="flex-none font-display text-xl tracking-tight text-ink">Transactions</h2>
+      <h2 className="flex-none font-display text-base tracking-tight text-ink">Transactions</h2>
       <div className="mt-4 flex-1 overflow-y-auto">
         {loading && <p className="py-3 text-sm text-ink-muted">Loading…</p>}
         {error && <p className="py-3 text-sm text-ink-muted">{error}</p>}
