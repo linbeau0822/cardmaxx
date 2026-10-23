@@ -21,6 +21,8 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
   const [recommendations, setRecommendations] = useState<CardRecommendation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [explanation, setExplanation] = useState<string | null>(null)
+  const [explanationLoading, setExplanationLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -44,6 +46,28 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
   const { ref, revealed } = useReveal<HTMLElement>()
   const [top, ...rest] = recommendations
 
+  useEffect(() => {
+    setExplanation(null)
+    if (!top) return
+    let cancelled = false
+    setExplanationLoading(true)
+    api
+      .explainRecommendation(top.card.id)
+      .then(({ explanation }) => {
+        if (!cancelled) setExplanation(explanation)
+      })
+      .catch(() => {
+        // Fail silently - a nice-to-have under a confident recommendation,
+        // not something to show error text for.
+      })
+      .finally(() => {
+        if (!cancelled) setExplanationLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [top?.card.id])
+
   const spotlightBody = loading ? (
     <p className="mt-4 text-sm text-ink-muted">Loading…</p>
   ) : error ? (
@@ -66,6 +90,16 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
             .map((w) => `${w.category_name} (${formatBps(w.previous_rate_bps)} → ${formatBps(w.new_rate_bps)})`)
             .join(', ')}
         </p>
+      )}
+      {explanationLoading && (
+        <p className="mt-3 flex items-center gap-1">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted" />
+        </p>
+      )}
+      {explanation && (
+        <p className="mt-3 animate-[fade-in_500ms_ease-out] text-sm text-ink-muted">{explanation}</p>
       )}
     </>
   )
