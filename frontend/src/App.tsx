@@ -109,24 +109,23 @@ export default function App() {
         </div>
         <div className="col-span-12 lg:col-span-4 lg:text-right">
           <ApiStatus />
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={connectAccount}
+              disabled={pending}
+              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
+            >
+              {pending ? 'Connecting…' : 'Connect Account'}
+            </button>
+          </div>
+          {message && (
+            <p role="status" className="mt-2 text-xs text-ink-muted">
+              {message}
+            </p>
+          )}
         </div>
       </header>
-
-      <div className="mt-8">
-        <button
-          type="button"
-          onClick={connectAccount}
-          disabled={pending}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface transition hover:brightness-110 disabled:opacity-60"
-        >
-          {pending ? 'Connecting…' : 'Connect Account'}
-        </button>
-        {message && (
-          <p role="status" className="mt-3 text-sm text-ink-muted">
-            {message}
-          </p>
-        )}
-      </div>
 
       {accounts !== null && accounts.length === 0 ? (
         <div className="mt-16">
@@ -138,12 +137,12 @@ export default function App() {
         accounts !== null && (
           <div className="mt-16 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_22rem] lg:gap-14">
             <div className="grid min-w-0 gap-16">
-              <SpendingOverview refreshKey={transactionsVersion} />
-              <div className="grid gap-16 md:grid-cols-2 md:gap-10">
-                <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} />
-                <RecommendationsPanel refreshKey={accountsVersion} />
-              </div>
+              <RecommendationsPanel refreshKey={accountsVersion} />
               <PortfolioPanel refreshKey={accountsVersion} />
+              <div className="grid gap-10 opacity-90">
+                <CardsPanel accounts={accounts} onLinked={() => setAccountsVersion((v) => v + 1)} compact />
+                <SpendingOverview refreshKey={transactionsVersion} compact />
+              </div>
               <div className="md:ml-16 md:max-w-xl">
                 <AskAIPanel />
               </div>

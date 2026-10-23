@@ -164,7 +164,7 @@ function TopMerchants({ merchants }: { merchants: MerchantSpending[] }) {
 }
 
 /** Category breakdown, as a bar chart, for a month the user can step through. */
-export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
+export function SpendingOverview({ refreshKey, compact }: { refreshKey: number; compact?: boolean }) {
   const [categories, setCategories] = useState<CategorySpending[]>([])
   const [allCategories, setAllCategories] = useState<string[]>([])
   const [months, setMonths] = useState<MonthSpending[]>([])
@@ -237,11 +237,11 @@ export function SpendingOverview({ refreshKey }: { refreshKey: number }) {
 
   return (
     <>
-      <Panel title="Spending Overview" subtitle="Where your money goes, by category and month.">
+      <Panel title="Spending Overview" subtitle="Where your money goes, by category and month." compact={compact}>
         {body}
       </Panel>
       {!loading && !error && topMerchants.length > 0 && (
-        <Panel title="Top Merchants" subtitle="Your highest all-time spend by merchant.">
+        <Panel title="Top Merchants" subtitle="Your highest all-time spend by merchant." compact={compact}>
           <TopMerchants merchants={topMerchants} />
         </Panel>
       )}
