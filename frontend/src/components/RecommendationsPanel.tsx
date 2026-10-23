@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, api, type CardRecommendation } from '../lib/api'
 import { IssuerLogo } from './IssuerLogo'
 import { Panel } from './Panel'
+import { useReveal } from '../lib/useReveal'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
@@ -21,6 +22,8 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
   const [recommendations, setRecommendations] = useState<CardRecommendation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [explanation, setExplanation] = useState<string | null>(null)
+  const [explanationLoading, setExplanationLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -41,42 +44,107 @@ export function RecommendationsPanel({ refreshKey }: { refreshKey: number }) {
     }
   }, [refreshKey])
 
-  const body = loading ? (
-    <p className="text-sm text-ink-muted">Loading…</p>
+  const { ref, revealed } = useReveal<HTMLElement>()
+  const [top, ...rest] = recommendations
+
+  useEffect(() => {
+    setExplanation(null)
+    if (!top) return
+    let cancelled = false
+    setExplanationLoading(true)
+    api
+      .explainRecommendation(top.card.id)
+      .then(({ explanation }) => {
+        if (!cancelled) setExplanation(explanation)
+      })
+      .catch(() => {
+        // Fail silently - a nice-to-have under a confident recommendation,
+        // not something to show error text for.
+      })
+      .finally(() => {
+        if (!cancelled) setExplanationLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [top?.card.id])
+
+  const spotlightBody = loading ? (
+    <p className="mt-4 text-sm text-ink-muted">Loading…</p>
   ) : error ? (
-    <p className="text-sm text-ink-muted">{error}</p>
-  ) : recommendations.length === 0 ? (
-    <p className="text-sm text-ink-muted">No card in the catalogue beats what you already have.</p>
+    <p className="mt-4 text-sm text-ink-muted">{error}</p>
+  ) : !top ? (
+    <p className="mt-4 text-sm text-ink-muted">No card in the catalogue beats what you already have.</p>
   ) : (
-    <ul className="divide-y divide-white/5">
-      {recommendations.map((r) => (
-        <li key={r.card.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="flex items-center gap-2 text-sm font-medium text-ink">
-              <IssuerLogo issuer={r.card.issuer} network={r.card.network} />
-              {r.card.issuer} {r.card.name}
-            </span>
-            <span className={`flex-none text-sm font-medium ${r.incremental_value_cents >= 0 ? 'text-accent' : 'text-ink-muted'}`}>
-              {r.incremental_value_cents >= 0 ? '+' : ''}
-              {currency.format(r.incremental_value_cents / 100)}/yr
-            </span>
-          </div>
-          {r.categories_won.length > 0 && (
-            <p className="mt-0.5 text-xs text-ink-muted">
-              Beats your current cards on{' '}
-              {r.categories_won
-                .map((w) => `${w.category_name} (${formatBps(w.previous_rate_bps)} → ${formatBps(w.new_rate_bps)})`)
-                .join(', ')}
-            </p>
-          )}
-        </li>
-      ))}
-    </ul>
+    <>
+      <h2 className="mt-3 flex items-center gap-2 font-display text-3xl tracking-tight text-ink sm:text-4xl md:text-5xl">
+        <IssuerLogo issuer={top.card.issuer} network={top.card.network} />
+        {top.card.issuer} {top.card.name}
+      </h2>
+      <p className="mt-4 text-2xl font-medium text-accent sm:text-3xl">
+        {top.incremental_value_cents >= 0 ? '+' : ''}
+        {currency.format(top.incremental_value_cents / 100)}/yr
+      </p>
+      {top.categories_won.length > 0 && (
+        <p className="mt-3 text-sm text-ink-muted">
+          Beats your current cards on{' '}
+          {top.categories_won
+            .map((w) => `${w.category_name} (${formatBps(w.previous_rate_bps)} → ${formatBps(w.new_rate_bps)})`)
+            .join(', ')}
+        </p>
+      )}
+      {explanationLoading && (
+        <p className="mt-3 flex items-center gap-1">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted" />
+        </p>
+      )}
+      {explanation && (
+        <p className="mt-3 animate-[fade-in_500ms_ease-out] text-sm text-ink-muted">{explanation}</p>
+      )}
+    </>
   )
 
   return (
-    <Panel title="Recommendations" subtitle="Cards that would have earned you more on the spending you already do.">
-      {body}
-    </Panel>
+    <>
+      <section
+        ref={ref}
+        className={`rounded-2xl border border-accent/30 bg-accent/5 p-8 transition-all duration-700 ease-out sm:p-10 ${
+          revealed ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+        }`}
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-accent">Next best card</p>
+        {spotlightBody}
+      </section>
+      {!loading && !error && rest.length > 0 && (
+        <Panel title="Other recommendations" subtitle="More cards that would beat what you already have, ranked lower.">
+          <ul className="divide-y divide-white/5">
+            {rest.map((r) => (
+              <li key={r.card.id} className="-mx-2 rounded px-2 py-4 transition-colors hover:bg-white/5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                    <IssuerLogo issuer={r.card.issuer} network={r.card.network} />
+                    {r.card.issuer} {r.card.name}
+                  </span>
+                  <span className={`flex-none text-sm font-medium ${r.incremental_value_cents >= 0 ? 'text-accent' : 'text-ink-muted'}`}>
+                    {r.incremental_value_cents >= 0 ? '+' : ''}
+                    {currency.format(r.incremental_value_cents / 100)}/yr
+                  </span>
+                </div>
+                {r.categories_won.length > 0 && (
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Beats your current cards on{' '}
+                    {r.categories_won
+                      .map((w) => `${w.category_name} (${formatBps(w.previous_rate_bps)} → ${formatBps(w.new_rate_bps)})`)
+                      .join(', ')}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </>
   )
 }

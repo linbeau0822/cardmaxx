@@ -338,6 +338,59 @@ func (s *Server) handleAIAsk(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"answer": answer})
 }
 
+type explainRecommendationRequest struct {
+	CardID string `json:"card_id"`
+}
+
+// handleExplainRecommendation asks the AI assistant to explain, in a
+// sentence or two, why one specific recommended card is a good next card -
+// a thin wrapper over AIService.Ask: its system prompt already instructs
+// the model to ground "why" answers in categories_won and trailing-12-month
+// category spend, so no new prompt or context-building code is needed here.
+func (s *Server) handleExplainRecommendation(w http.ResponseWriter, r *http.Request) {
+	if s.ai == nil {
+		writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "AI assistant is not configured (set OPENAI_API_KEY)")
+		return
+	}
+
+	var req explainRecommendationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "request body must be JSON with a card_id field")
+		return
+	}
+	cardID, err := uuid.Parse(req.CardID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "card_id must be a UUID")
+		return
+	}
+
+	recommendations, err := s.plaid.RecommendCards(r.Context(), s.currentUserID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "recommend cards failed", slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, CodeInternal, "failed to compute recommendations")
+		return
+	}
+	var rec *service.CardRecommendation
+	for i := range recommendations {
+		if recommendations[i].Card.ID == cardID {
+			rec = &recommendations[i]
+			break
+		}
+	}
+	if rec == nil {
+		writeError(w, http.StatusNotFound, CodeNotFound, "no recommendation for that card_id")
+		return
+	}
+
+	question := "In 2-3 concise sentences, explain why the " + rec.Card.Issuer + " " + rec.Card.Name + " card is a good next card for me right now."
+	answer, err := s.ai.Ask(r.Context(), s.currentUserID, question)
+	if err != nil {
+		s.writeAIError(w, r, "explain recommendation", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"explanation": answer})
+}
+
 // writeAIError reports a failed OpenAI call. An ai.APIError carries a
 // message safe to surface (OpenAI's own documented error messages); anything
 // else is an internal failure whose detail stays in the logs.

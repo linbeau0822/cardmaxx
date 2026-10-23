@@ -17,7 +17,15 @@ function formatBps(bps: number): string {
  * unambiguously - every Plaid Sandbox account, and some real ones) get a
  * manual picker instead.
  */
-export function CardsPanel({ accounts, onLinked }: { accounts: Account[]; onLinked: () => void }) {
+export function CardsPanel({
+  accounts,
+  onLinked,
+  compact,
+}: {
+  accounts: Account[]
+  onLinked: () => void
+  compact?: boolean
+}) {
   const [catalog, setCatalog] = useState<Card[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -96,7 +104,7 @@ export function CardsPanel({ accounts, onLinked }: { accounts: Account[]; onLink
   )
 
   return (
-    <Panel title="Your Cards" subtitle="The cards in your wallet and what each one earns you.">
+    <Panel title="Your Cards" subtitle="The cards in your wallet and what each one earns you." compact={compact}>
       {body}
       {!loading && unmatched.length > 0 && (
         <div className="mt-4 border-t border-white/5 pt-4">
